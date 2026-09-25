@@ -1,0 +1,36 @@
+# Normaliza quebras de linha: LF no repositório e no working tree.
+# Evita diffs falsos e conflitos entre Windows/macOS/Linux.
+* text=auto eol=lf
+
+# Scripts Windows mantêm CRLF para funcionar corretamente.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Arquivos binários - nunca converter nem tratar como texto.
+*.db      binary
+*.sqlite  binary
+*.sqlite3 binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.eot     binary
+*.pdf     binary
+*.zip     binary
+
+# Linguagens - diffs e merge previsíveis.
+*.py   text diff=python
+*.ts   text
+*.tsx  text
+*.json text
+*.md   text diff=markdown
+*.css  text
+
+# Arquivos gerados não aparecem em revisões.
+package-lock.json  linguist-generated
