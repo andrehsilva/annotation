@@ -1,0 +1,60 @@
+/* Design tokens — see DESIGN.md. Dark is the default theme. */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #1b1b1b;
+  --surface: #202020;
+  --surface-raised: #262626;
+  --input-bg: #1d1d1d;
+  --code-bg: #191919;
+  --border: #313131;
+  --border-strong: #434343;
+  --text: #e7e7e7;
+  --text-muted: #a9a9a9;
+  --primary: #6ba5f8;
+  --primary-strong: #4b8cf0;
+  --on-primary: #10161f;
+  --warn-bg: #3b3b1d;
+  --warn-text: #e3e38a;
+  --danger: #f28b82;
+  --danger-strong: #c93a34;
+  --backdrop: rgb(0 0 0 / 55%);
+  --ring: rgb(107 165 248 / 25%);
+  --shadow: 0 18px 44px rgb(0 0 0 / 45%);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas,
+    "SFMono-Regular", ui-monospace, monospace;
+
+  --topbar-h: 52px;
+  --sidebar-w: 288px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --surface-raised: #ffffff;
+  --input-bg: #ffffff;
+  --code-bg: #f6f8fa;
+  --border: #e2e5ea;
+  --border-strong: #cfd4dc;
+  --text: #14161a;
+  --text-muted: #5c6470;
+  --primary: #1f6feb;
+  --primary-strong: #1a5fd0;
+  --on-primary: #ffffff;
+  --warn-bg: #f0f0c8;
+  --warn-text: #5c5c14;
+  --danger: #b42318;
+  --danger-strong: #b42318;
+  --backdrop: rgb(20 22 26 / 45%);
+  --ring: rgb(31 111 235 / 18%);
+  --shadow: 0 18px 44px rgb(20 22 26 / 14%);
+}
