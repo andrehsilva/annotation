@@ -275,6 +275,19 @@ textarea {
   font-size: 11px;
 }
 
+/* Criar caderno/nota a partir do chrome: com a lista de cadernos escondida não havia caminho. */
+.topbar-create {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+}
+
+.topbar-create .create-chip:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -2151,6 +2164,13 @@ iframe.element-media {
 @media (prefers-reduced-motion: reduce) {
   .toast {
     animation: none;
+  }
+}
+
+@media (max-width: 1320px) {
+  .create-label,
+  .user-chip-name {
+    display: none;
   }
 }
 

@@ -366,6 +366,16 @@ export default function App() {
     [notify, openNote, refreshWorkspace, report],
   );
 
+  /** Criar nota de qualquer lugar: usa o caderno aberto, senão o primeiro; sem nenhum, cria o caderno. */
+  const createNoteAnywhere = useCallback(() => {
+    const target = notebook ?? notebooks[0];
+    if (!target) {
+      void createNotebook();
+      return;
+    }
+    void createNote(target.id, "");
+  }, [createNote, createNotebook, notebook, notebooks]);
+
   const deleteNote = useCallback(
     (notebookId: number, noteId: number) => {
       const target = notebooks.find((item) => item.id === notebookId);
@@ -611,6 +621,8 @@ export default function App() {
         bellOpen={bellOpen}
         onBellOpenChange={changeBell}
         onAllRead={markEventsRead}
+        onNewNotebook={() => void createNotebook()}
+        onNewNote={createNoteAnywhere}
 
         sidebarOpen={sidebarOpen}
       />

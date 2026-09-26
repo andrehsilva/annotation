@@ -1,4 +1,4 @@
-import { CloudArrowUp, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Notebook, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { CloudArrowUp, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Notebook, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -28,6 +28,8 @@ interface TopBarProps {
   onChangePassword: () => void;
   onBellOpenChange: (open: boolean) => void;
   onAllRead: () => void;
+  onNewNotebook: () => void;
+  onNewNote: () => void;
 
   sidebarOpen: boolean;
 }
@@ -51,6 +53,8 @@ export function TopBar({
   onChangePassword,
   onBellOpenChange,
   onAllRead,
+  onNewNotebook,
+  onNewNote,
 
   sidebarOpen,
 }: TopBarProps) {
@@ -181,6 +185,31 @@ export function TopBar({
             );
           })}
       </nav>
+
+      <div className="topbar-create">
+        <button
+          type="button"
+          className="topnav-chip create-chip"
+          onClick={onNewNotebook}
+          title="Novo caderno"
+          aria-label="Novo caderno"
+        >
+          <Plus size={14} weight="bold" />
+          <Notebook size={15} weight="bold" />
+          <span className="create-label">Caderno</span>
+        </button>
+        <button
+          type="button"
+          className="topnav-chip create-chip"
+          onClick={onNewNote}
+          title="Nova nota"
+          aria-label="Nova nota"
+        >
+          <Plus size={14} weight="bold" />
+          <NoteBlank size={15} weight="bold" />
+          <span className="create-label">Nota</span>
+        </button>
+      </div>
 
       <div className="topbar-actions">
         <div className="user-menu" ref={menuRef}>
