@@ -284,60 +284,30 @@ textarea {
   font-size: 11px;
 }
 
-/* Ações rápidas: flutuam no canto da coluna de conteúdo, perto de onde se digita, e mudam com a
-   tela (caderno/nota). Ficam fora do cabeçalho do app de propósito. */
-.quick-actions {
-  position: sticky;
-  z-index: 15;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 0 36px var(--space-5);
-  /* O invólucro só posiciona: quem recebe clique é a pílula. */
-  pointer-events: none;
-}
-
-.quick-pill {
-  display: flex;
+/* Criar caderno/nota no cabeçalho, colados no chip do usuário: a folga de 28px antes do grupo e a
+   linha divisória separam a criação das utilidades (sino, Drive, tema, busca). */
+.topbar-create {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 5px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-full);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow);
-  pointer-events: auto;
+  gap: var(--space-3);
+  margin-right: var(--space-6);
 }
 
-.quick-actions .icon-btn {
-  border-color: transparent;
-  background: none;
+.topbar-create .create-btn {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
-.quick-actions .icon-btn:hover {
-  border-color: transparent;
-  background: var(--surface);
-}
-
-.quick-actions .icon-btn.is-primary {
+.topbar-create .create-btn:hover {
+  border-color: var(--primary);
   color: var(--primary);
 }
 
-.quick-actions .quick-plus {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-}
-
-.quick-actions .icon-btn {
-  position: relative;
-}
-
-/* A coluna de conteúdo começa depois da lista de cadernos: é o que posiciona o cluster. */
-.app.has-sidebar {
-  --content-left: var(--sidebar-w);
+.topbar-divider {
+  width: 1px;
+  height: 22px;
+  margin-right: var(--space-3);
+  background: var(--border);
 }
 
 .topbar-actions {
@@ -2219,9 +2189,17 @@ iframe.element-media {
   }
 }
 
-@media (max-width: 1320px) {
+/* Telas estreitas: os rótulos dos botões de criação e do chip do usuário somem e ficam os ícones
+   (o nome continua no title/aria-label). */
+@media (max-width: 1420px) {
+  .create-label,
   .user-chip-name {
     display: none;
+  }
+
+  .topbar-create {
+    gap: var(--space-2);
+    margin-right: var(--space-4);
   }
 }
 
