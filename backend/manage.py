@@ -13,18 +13,21 @@ import argparse
 import getpass
 import sys
 
-from sqlalchemy import delete, func, select
-
-from app import security
-from app.database import SessionLocal
-from app.models import SessionToken, User
+from app import security, values
+from app.store import documents, equal, order_asc, store
+from app.store.documents import Row
 
 
-def load_user(db, email: str) -> User:
-    user = db.scalar(select(User).where(func.lower(User.email) == email.strip().lower()))
+def load_user(email: str) -> Row:
+    user = documents.user_by_email(email)
     if user is None:
         sys.exit(f"[notai] usuário não encontrado: {email}")
     return user
+
+
+def drop_sessions(user: Row) -> None:
+    """Sessões abertas daquele usuário; o rowId é o hash do token, então o filtro é o `user_id`."""
+    store().delete_where("sessions", [equal("user_id", str(user.id))])
 
 
 def ask_password(explicit: str | None) -> str:
@@ -65,52 +68,57 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    with SessionLocal() as db:
-        if args.command == "list-users":
-            users = db.scalars(select(User).order_by(User.email)).all()
-            if not users:
-                print("nenhum usuário ainda")
-            for user in users:
-                state = "ativo" if user.is_active else "desativado"
-                last = user.last_login_at.strftime("%Y-%m-%d %H:%M") if user.last_login_at else "nunca"
-                print(f"{user.email}\t{user.role}\t{state}\túltimo acesso: {last}")
-            return 0
+    if args.command == "list-users":
+        users = documents.all_rows("users", [order_asc("email")])
+        if not users:
+            print("nenhum usuário ainda")
+        for user in users:
+            state = "ativo" if user.is_active else "desativado"
+            last = user.last_login_at.strftime("%Y-%m-%d %H:%M") if user.last_login_at else "nunca"
+            print(f"{user.email}\t{user.role}\t{state}\túltimo acesso: {last}")
+        return 0
 
-        if args.command == "create-user":
-            email = args.email.strip().lower()
-            if db.scalar(select(User).where(func.lower(User.email) == email)) is not None:
-                sys.exit(f"[notai] já existe: {email}")
-            user = User(
-                email=email,
-                display_name=args.name.strip() or email.split("@")[0],
-                password_hash=security.hash_password(ask_password(args.password)),
-                role="admin" if args.admin else "user",
-            )
-            db.add(user)
-            db.commit()
-            print(f"[notai] criado: {user.email} ({user.role})")
-            return 0
+    if args.command == "create-user":
+        email = args.email.strip().lower()
+        if documents.user_by_email(email) is not None:
+            sys.exit(f"[notai] já existe: {email}")
+        user = documents.write(
+            "users",
+            documents.record_id("users"),
+            {
+                "email": email,
+                "display_name": args.name.strip() or email.split("@")[0],
+                "password_hash": security.hash_password(ask_password(args.password)),
+                "role": "admin" if args.admin else "user",
+                "is_active": True,
+                "created_at": values.utcnow(),
+            },
+            owner_id=None,
+        )
+        print(f"[notai] criado: {user.email} ({user.role})")
+        return 0
 
-        user = load_user(db, args.email)
+    user = load_user(args.email)
 
-        if args.command == "set-password":
-            user.password_hash = security.hash_password(ask_password(args.password))
-            db.execute(delete(SessionToken).where(SessionToken.user_id == user.id))
-            db.commit()
-            print(f"[notai] senha trocada e sessões encerradas: {user.email}")
-        elif args.command == "set-role":
-            user.role = args.role
-            db.commit()
-            print(f"[notai] {user.email} agora é {user.role}")
-        elif args.command == "activate":
-            user.is_active = True
-            db.commit()
-            print(f"[notai] {user.email} pode entrar de novo")
-        elif args.command == "deactivate":
-            user.is_active = False
-            db.execute(delete(SessionToken).where(SessionToken.user_id == user.id))
-            db.commit()
-            print(f"[notai] {user.email} bloqueado")
+    if args.command == "set-password":
+        documents.change(
+            "users",
+            user.id,
+            {"password_hash": security.hash_password(ask_password(args.password))},
+            owner_id=None,
+        )
+        drop_sessions(user)
+        print(f"[notai] senha trocada e sessões encerradas: {user.email}")
+    elif args.command == "set-role":
+        documents.change("users", user.id, {"role": args.role}, owner_id=None)
+        print(f"[notai] {user.email} agora é {args.role}")
+    elif args.command == "activate":
+        documents.change("users", user.id, {"is_active": True}, owner_id=None)
+        print(f"[notai] {user.email} pode entrar de novo")
+    elif args.command == "deactivate":
+        documents.change("users", user.id, {"is_active": False}, owner_id=None)
+        drop_sessions(user)
+        print(f"[notai] {user.email} bloqueado")
     return 0
 
 

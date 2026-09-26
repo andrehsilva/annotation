@@ -1,8 +1,10 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-sqlalchemy>=2.0.30
 pydantic>=2.7
 python-multipart>=0.0.9
 google-auth-oauthlib>=1.2
 google-api-python-client>=2.130
 google-auth-httplib2>=0.2
+# 15.3.0 = último SDK que fala o dialeto desta instância (ver tools/appwrite_schema.py):
+# o 16.0.0 falha ao parsear as respostas (Database/Table/Row pedem campos que o servidor não manda).
+appwrite==15.3.0

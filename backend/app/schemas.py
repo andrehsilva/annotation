@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
-from .models import BLOCK_TYPES
+from .values import BLOCK_TYPES
 
 BlockType = Literal["text", "code", "url", "image", "video"]
 

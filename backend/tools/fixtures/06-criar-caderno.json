@@ -1,0 +1,43 @@
+{
+  "body": {
+    "affinity": [],
+    "counts": {
+      "code": 0,
+      "image": 0,
+      "text": 1,
+      "url": 0,
+      "video": 0
+    },
+    "created_at": "<timestamp>",
+    "description": "caderno temporário de tools/parity_check.py",
+    "id": "<id:caderno>",
+    "notes": [
+      {
+        "counts": {
+          "code": 0,
+          "image": 0,
+          "text": 1,
+          "url": 0,
+          "video": 0
+        },
+        "created_at": "<timestamp>",
+        "excerpt": "",
+        "id": "<id:nota>",
+        "notebook_id": "<id:caderno>",
+        "notebook_title": "parity-check",
+        "position": 0,
+        "tags": [],
+        "title": "",
+        "updated_at": "<timestamp>"
+      }
+    ],
+    "notes_count": 1,
+    "relations_count": 0,
+    "tags": [],
+    "title": "parity-check",
+    "updated_at": "<timestamp>"
+  },
+  "kind": "json",
+  "status": 201,
+  "step": "criar_caderno"
+}

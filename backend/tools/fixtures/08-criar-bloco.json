@@ -1,0 +1,17 @@
+{
+  "body": {
+    "caption": "",
+    "created_at": "<timestamp>",
+    "id": "<id:bloco>",
+    "language": "python",
+    "note_id": "<id:nota>",
+    "position": 1,
+    "text": "print(1)",
+    "type": "code",
+    "updated_at": "<timestamp>",
+    "url": ""
+  },
+  "kind": "json",
+  "status": 201,
+  "step": "criar_bloco"
+}

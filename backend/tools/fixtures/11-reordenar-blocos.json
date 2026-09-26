@@ -1,0 +1,31 @@
+{
+  "body": [
+    {
+      "caption": "",
+      "created_at": "<timestamp>",
+      "id": "<id:bloco>",
+      "language": "python",
+      "note_id": "<id:nota>",
+      "position": 0,
+      "text": "print(2)",
+      "type": "code",
+      "updated_at": "<timestamp>",
+      "url": ""
+    },
+    {
+      "caption": "",
+      "created_at": "<timestamp>",
+      "id": "<id:bloco>",
+      "language": "",
+      "note_id": "<id:nota>",
+      "position": 1,
+      "text": "texto inicial do teste de paridade",
+      "type": "text",
+      "updated_at": "<timestamp>",
+      "url": ""
+    }
+  ],
+  "kind": "json",
+  "status": 200,
+  "step": "reordenar_blocos"
+}

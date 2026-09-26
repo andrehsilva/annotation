@@ -1,0 +1,10 @@
+{
+  "body": {
+    "color": "#1f6feb",
+    "id": "<id:tag>",
+    "name": "<tag:nome>"
+  },
+  "kind": "json",
+  "status": 201,
+  "step": "criar_tag"
+}

@@ -1,0 +1,14 @@
+{
+  "body": {
+    "created_at": "<timestamp>",
+    "display_name": "Admin",
+    "email": "andrehrsilva@gmail.com",
+    "id": "<id:tag>",
+    "is_active": true,
+    "last_login_at": "<timestamp>",
+    "role": "admin"
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "me"
+}

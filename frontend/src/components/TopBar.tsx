@@ -133,7 +133,7 @@ export function TopBar({
         <span className="logo-mark" aria-hidden="true">
           {">_"}
         </span>
-        <span className="wordmark">NotAI</span>
+        <span className="wordmark">AnotAI</span>
       </div>
 
       <nav className="topnav">

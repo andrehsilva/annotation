@@ -1,15 +1,16 @@
-"""Who did what: one row per write, and the little feed the bell shows at the top of the app.
+"""Quem fez o quê: uma linha por escrita, e o feed que a campainha mostra no topo do app.
 
-The row is added, never committed, by `record` — the caller's commit carries it, so an action that
-fails halfway leaves no trace.
+A linha do evento entra na **mesma transação** da escrita que a gerou (`operation` +
+`store().stage(tx, [...])`), então uma ação que falha no meio não deixa rastro. `record` é a
+exceção: escreve na hora, fora de transação, para `manage.py`, `seed.py` e scripts.
 """
 
 from __future__ import annotations
 
-from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session
+from typing import Any
 
-from .models import Event, User, utcnow
+from .store import client, documents
+from .store.documents import Row
 
 FEED_LIMIT = 5
 FEED_MAX = 50
@@ -28,48 +29,76 @@ ACTIONS = (
 ENTITIES = ("notebook", "note", "block", "tag", "relation", "media", "user")
 
 
-def record(
-    db: Session, user: User, action: str, entity: str, target: str = "", detail: str = ""
-) -> None:
-    db.add(
-        Event(
-            user_id=user.id,
-            action=action,
-            entity=entity,
-            target=" ".join((target or "").split())[:200],
-            detail=" ".join((detail or "").split())[:80],
-        )
+def _fields(
+    user_id: int, action: str, entity: str, target: str, detail: str
+) -> dict[str, Any]:
+    """Os mesmos cortes de antes: espaços colapsados e 200/80 caracteres por coluna.
+
+    `created_at` sai em ISO porque quem escreve é `create_row` cru (o SDK serializa o corpo com
+    `json.dumps`) — `documents.write` já faria essa conversão, `db.create` não.
+    """
+    return {
+        "user_id": str(user_id),
+        "action": action,
+        "entity": entity,
+        "target": " ".join((target or "").split())[:200],
+        "detail": " ".join((detail or "").split())[:80],
+        "created_at": documents.to_iso(documents.now()),
+    }
+
+
+def record(db, user, action: str, entity: str, target: str = "", detail: str = "") -> None:
+    """Escreve o evento na hora, sem transação: scripts e `manage.py`, não rota."""
+    db.create("events", documents.record_id("events"), _fields(user.id, action, entity, target, detail))
+
+
+def operation(
+    user_id: int, action: str, entity: str, target: str = "", detail: str = ""
+) -> dict[str, Any]:
+    """A operação de auditoria para `store().stage(tx, [...])`, junto com a escrita da entidade."""
+    return documents.operation(
+        "events", documents.record_id("events"), _fields(user_id, action, entity, target, detail)
     )
 
 
-def visible(user: User) -> Select:
-    """The admin watches the whole platform; everybody else only their own moves."""
-    statement = select(Event)
-    if user.role != "admin":
-        statement = statement.where(Event.user_id == user.id)
-    return statement
+def visible(user: Row) -> list[str]:
+    """O admin acompanha a plataforma inteira; todo mundo só os próprios movimentos."""
+    if user.role == "admin":
+        return []
+    return [client.equal("user_id", str(user.id))]
 
 
-def feed(db: Session, user: User, limit: int = FEED_LIMIT) -> list[Event]:
-    statement = visible(user).order_by(Event.created_at.desc(), Event.id.desc()).limit(limit)
-    return list(db.scalars(statement).all())
+def feed(db, user: Row, limit: int = FEED_LIMIT) -> list[Row]:
+    """As últimas ações visíveis, mais novas primeiro."""
+    queries = visible(user) + [client.order_desc("created_at"), client.limit(limit)]
+    return documents.many("events", db.list_rows("events", queries).rows)
 
 
-def unseen(db: Session, user: User) -> int:
-    statement = visible(user)
+def unseen(db, user: Row) -> int:
+    """Quantas ações chegaram depois do último instante que o usuário abriu a campainha."""
+    queries = visible(user)
     if user.activity_seen_at is not None:
-        statement = statement.where(Event.created_at > user.activity_seen_at)
-    return db.scalar(select(func.count()).select_from(statement.subquery())) or 0
+        # `greaterThan` em coluna `datetime`: o dialeto quer a string ISO (não há helper pronto).
+        queries = queries + [
+            client.q(
+                method="greaterThan",
+                attribute="created_at",
+                values=[documents.to_iso(user.activity_seen_at)],
+            )
+        ]
+    return db.count("events", queries)
 
 
-def mark_seen(db: Session, user: User) -> None:
-    user.activity_seen_at = utcnow()
+def mark_seen(db, user: Row) -> None:
+    """A partir de agora o `unread` só conta o que vier depois."""
+    documents.change("users", user.id, {"activity_seen_at": documents.now()}, owner_id=None)
 
 
-def actors(db: Session, rows: list[Event]) -> dict[int, str]:
-    """Name for each author in the page of rows, in one query."""
-    ids = {row.user_id for row in rows}
+def actors(db, rows: list[Row]) -> dict[int, str]:
+    """Nome de cada autor da página, numa consulta só: `equal` aceita vários ids."""
+    ids = {str(row.user_id) for row in rows}
     if not ids:
         return {}
-    people = db.scalars(select(User).where(User.id.in_(ids))).all()
+    queries = [client.equal("$id", *ids), client.limit(len(ids))]
+    people = documents.many("users", db.list_rows("users", queries).rows)
     return {person.id: person.display_name or person.email for person in people}

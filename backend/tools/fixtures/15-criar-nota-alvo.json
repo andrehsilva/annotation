@@ -1,0 +1,29 @@
+{
+  "body": {
+    "blocks": [
+      {
+        "caption": "",
+        "created_at": "<timestamp>",
+        "id": "<id:bloco>",
+        "language": "",
+        "note_id": "<id:nota>",
+        "position": 0,
+        "text": "nota alvo do vínculo",
+        "type": "text",
+        "updated_at": "<timestamp>",
+        "url": ""
+      }
+    ],
+    "created_at": "<timestamp>",
+    "id": "<id:nota>",
+    "notebook_id": "<id:caderno>",
+    "position": 2,
+    "relations": [],
+    "tags": [],
+    "title": "parity-alvo",
+    "updated_at": "<timestamp>"
+  },
+  "kind": "json",
+  "status": 201,
+  "step": "criar_nota_alvo"
+}

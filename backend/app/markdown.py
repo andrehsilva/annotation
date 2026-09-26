@@ -2,6 +2,10 @@
 
 One file per note, deterministic: the same note always yields the same bytes, which is what lets
 the export compare checksums instead of timestamps.
+
+As linhas chegam normalizadas do store (`note.title`, `block.text`, ...). Relacionamento não
+existe no Appwrite, então quem chama monta os pedaços — blocos, tags e o título do caderno vêm do
+`store().snapshot(user_id)`.
 """
 
 from __future__ import annotations
@@ -9,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 
-from .models import Block, Note
+from .store.documents import Row
 
 UNTITLED = "Nota sem título"
 MEDIA_PREFIX = "/media/"
@@ -31,7 +35,7 @@ def _one_line(text: str | None) -> str:
     return " ".join(_text(text).split())
 
 
-def _render(block: Block, media_links: Mapping[str, str]) -> str:
+def _render(block: Row, media_links: Mapping[str, str]) -> str:
     url = _text(block.url).strip()
     caption = _text(block.caption).strip()
     if url.startswith(MEDIA_PREFIX):
@@ -49,19 +53,27 @@ def _render(block: Block, media_links: Mapping[str, str]) -> str:
 
 
 def note_markdown(
-    note: Note,
+    note: Row,
+    blocks: Sequence[Row] = (),
+    *,
+    notebook_title: str = "",
+    tags: Sequence[str] = (),
     media_links: Mapping[str, str] | None = None,
     related: Sequence[str] = (),
     mentions: Sequence[str] = (),
 ) -> str:
-    """Front matter + heading + one section per block, media urls swapped for their Drive link."""
+    """Front matter + heading + one section per block, media urls swapped for their Drive link.
+
+    `blocks` (na ordem do editor), `tags` e `notebook_title` vêm de fora porque a linha normalizada
+    não carrega relacionamento: no Appwrite, caderno e tags são consultas, não atributos.
+    """
     links = media_links or {}
     title = _one_line(note.title) or UNTITLED
     front = [
         "---",
-        f"notebook: {_one_line(note.notebook.title)}",
+        f"notebook: {_one_line(notebook_title)}",
         f"note: {title}",
-        f"tags: [{', '.join(_one_line(tag.name) for tag in note.tags)}]",
+        f"tags: [{', '.join(_one_line(tag) for tag in tags)}]",
         f"related: [{', '.join(_one_line(other) for other in related)}]",
         f"mentions: [{', '.join(_one_line(other) for other in mentions)}]",
         f"created: {_iso_z(note.created_at)}",
@@ -70,8 +82,12 @@ def note_markdown(
         "---",
     ]
     parts = ["\n".join(front), "", f"# {title}"]
-    for block in note.blocks:
-        if not (_text(block.text).strip() or _text(block.url).strip() or _text(block.caption).strip()):
+    for block in blocks:
+        if not (
+            _text(block.text).strip()
+            or _text(block.url).strip()
+            or _text(block.caption).strip()
+        ):
             continue
         parts.extend(["", _render(block, links)])
     return "\n".join(parts) + "\n"

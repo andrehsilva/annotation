@@ -1,4 +1,8 @@
-"""FastAPI application for NotAI: users, notebooks, notes, blocks, tags, relations."""
+"""FastAPI application for NotAI: users, notebooks, notes, blocks, tags, relations.
+
+O app não guarda mais dado nenhum em SQLite: `app/store/` fala com o Appwrite (TablesDB + Storage) e
+o processo é um BFF fino — contrato HTTP intacto, regra de negócio e agregação aqui.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +12,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import bootstrap, deps, migrations, sync
-from .database import DATA_DIR, MEDIA_DIR, Base, engine
+from . import bootstrap, deps, sync
 from .routers import (
     admin,
     auth,
@@ -29,16 +32,11 @@ ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    if migrations.pending(engine):
-        backup = migrations.snapshot(engine)
-        if backup is not None:
-            print(f"[notai] backup do banco antes da migração: {backup.name}", flush=True)
-    Base.metadata.create_all(engine)
-    migrations.add_columns(engine)
-    owner = bootstrap.ensure_admin()
-    migrations.run(engine, owner.id)
-    migrations.backfill(engine, owner.id, MEDIA_DIR)
-    migrations.move_drive_files(DATA_DIR, owner.id)
+    """Sem migração de banco: o schema é versionado em `tools/appwrite_schema.py`.
+
+    Só resta garantir que exista um admin — sem ele ninguém conseguiria entrar na primeira subida.
+    """
+    bootstrap.ensure_admin()
     yield
 
 

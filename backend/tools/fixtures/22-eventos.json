@@ -1,0 +1,60 @@
+{
+  "body": {
+    "items": [
+      {
+        "action": "linked",
+        "actor": "Admin",
+        "created_at": "<timestamp>",
+        "detail": "",
+        "entity": "relation",
+        "id": "<id:evento>",
+        "mine": true,
+        "target": "parity-nota → parity-alvo"
+      },
+      {
+        "action": "created",
+        "actor": "Admin",
+        "created_at": "<timestamp>",
+        "detail": "",
+        "entity": "note",
+        "id": "<id:evento>",
+        "mine": true,
+        "target": "parity-alvo"
+      },
+      {
+        "action": "tagged",
+        "actor": "Admin",
+        "created_at": "<timestamp>",
+        "detail": "<tag:nome>",
+        "entity": "note",
+        "id": "<id:evento>",
+        "mine": true,
+        "target": "parity-nota"
+      },
+      {
+        "action": "created",
+        "actor": "Admin",
+        "created_at": "<timestamp>",
+        "detail": "",
+        "entity": "tag",
+        "id": "<id:evento>",
+        "mine": true,
+        "target": "<tag:nome>"
+      },
+      {
+        "action": "updated",
+        "actor": "Admin",
+        "created_at": "<timestamp>",
+        "detail": "",
+        "entity": "block",
+        "id": "<id:evento>",
+        "mine": true,
+        "target": "parity-nota"
+      }
+    ],
+    "unread": "<contagem>"
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "eventos"
+}

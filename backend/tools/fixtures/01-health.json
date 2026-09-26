@@ -1,0 +1,8 @@
+{
+  "body": {
+    "status": "ok"
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "health"
+}

@@ -1,0 +1,8 @@
+{
+  "body": {
+    "detail": "Sessão inválida ou expirada. Entre de novo."
+  },
+  "kind": "json",
+  "status": 401,
+  "step": "me_sem_cookie"
+}

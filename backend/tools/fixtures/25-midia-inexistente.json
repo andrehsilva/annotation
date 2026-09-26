@@ -1,0 +1,8 @@
+{
+  "body": {
+    "detail": "Arquivo não encontrado"
+  },
+  "kind": "json",
+  "status": 404,
+  "step": "midia_inexistente"
+}

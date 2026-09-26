@@ -7,35 +7,34 @@ livre e o tipo do bloco troca no teclado, sem tirar a mão da linha.
 Cada pessoa entra com **e-mail e senha** e enxerga só os próprios cadernos — notas, blocos, tags,
 vínculos e arquivos são dela. Quem cria as contas é o **admin**, na tela **Usuários**.
 
-- Backend: FastAPI + SQLAlchemy + SQLite (`backend/`)
+- Backend: FastAPI como BFF fino, com **Appwrite como camada de dados** (`backend/`)
 - Frontend: React 19 + Vite + TypeScript (`frontend/`)
 - Tema escuro e claro, tokens em [`DESIGN.md`](DESIGN.md)
 
 ## Rodando
 
-Backend (porta 8000):
+Backend (porta 8000) — precisa de `backend/.env` com as credenciais do Appwrite (veja `backend/.env.example`):
 
 ```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt   # Windows
 # .venv/bin/python -m pip install -r requirements.txt         # macOS/Linux
+.venv/Scripts/python.exe tools/appwrite_schema.py --check     # o schema está em dia na instância?
 .venv/Scripts/python.exe -m uvicorn app.main:app --reload
 ```
 
-Dados ficam em `backend/data/caderno.db`; arquivos enviados em `backend/data/media/`.
-Ambos são criados no primeiro start (`CADERNO_DATA_DIR` e `CADERNO_DATABASE_URL` mudam os caminhos).
+O schema do Appwrite é **código**: `tools/appwrite_schema.py --spec` imprime o que está declarado,
+`--check` diz o que falta e `--apply` cria (idempotente). Nada de migração no start do app.
 
-No primeiro start com o banco vazio o app cria o admin e imprime a senha **uma vez** no log:
+No primeiro start com a tabela de usuários vazia o app cria o admin e imprime a senha **uma vez** no log:
 
 ```
 [notai] admin criado: admin@notai.local / senha k1Ki2YJGUvrf_8mQ — troque com `python manage.py set-password <e-mail>`
 ```
 
 `CADERNO_ADMIN_EMAIL` e `CADERNO_ADMIN_PASSWORD` escolhem esse primeiro admin (sem a senha na
-variável, ela é sorteada e mostrada no log). Banco de antes desta mudança é migrado no start, com uma
-cópia de segurança ao lado (`caderno.db.bak-<data>`), e tudo o que existia fica com o admin — que
-depois entra, troca a senha e cria as contas dos outros.
+variável, ela é sorteada e mostrada no log) — o admin entra, troca a senha e cria as contas dos outros.
 
 Frontend (porta 5173, proxy de `/api` e `/media` para o backend):
 
@@ -47,6 +46,57 @@ npm run dev
 
 Dados de demonstração: `cd backend && .venv/Scripts/python.exe seed.py --reset`
 (`--email <e-mail>` dá os dados a outra pessoa; o padrão é o admin).
+
+## Deploy
+
+Produção é Docker Compose atrás do proxy do painel: `deploy/docker-compose.yml` sobe dois serviços —
+`api` (uvicorn em 8000) e `web` (nginx servindo o SPA e repassando `/api` e `/media` para `api:8000`) —
+com as variáveis de `deploy/.env.example` (a `APPWRITE_API_KEY` fica só no painel, nunca no repositório).
+Nenhuma porta é publicada: quem liga o domínio à porta 80 do serviço `web` é o EasyPanel.
+
+No painel, o serviço é do tipo **Compose**, com o repositório deste projeto, branch `main` e **build
+path** `deploy`. O segundo `server_name` do `frontend/nginx.conf` (console do Appwrite em
+`host.docker.internal:8080`) só serve se o Appwrite for movido para essa porta; com o console roteado
+pelo próprio painel ele fica sem uso.
+
+## Dados
+
+Tudo mora no **Appwrite** (TablesDB + Storage), no database de `APPWRITE_DATABASE_ID` — o Postgres/MariaDB
+do Appwrite é o banco de verdade. O backend é a única porta: o front nunca fala com o Appwrite, então
+não há SDK, CORS nem cookie de terceiro no navegador.
+
+| tabela | o que guarda | chave (`$id`) |
+| --- | --- | --- |
+| `users` | conta, papel, `is_active`, hash da senha, `activity_seen_at` | id numérico (legado verbatim) |
+| `sessions` | sessão do cookie: sha256 do token **truncado a 32 chars** (o `$id` aceita 36) | id truncado |
+| `notebooks`, `notes`, `blocks` | o conteúdo, com `position` para a ordem | id numérico |
+| `notebook_members` | papel do usuário no caderno (`owner`/`editor`/`viewer`) | `<user_id>_<notebook_id>` |
+| `tags` | tag por dono; `name_key = "<owner_id>::<nome>"` com índice unique faz o nome ser único na conta | id numérico |
+| `notebook_tags`, `note_tags` | tag aplicada a caderno/nota | `<caderno ou nota>_<tag>` |
+| `note_relations`, `block_links` | vínculos declarados e menções `[[…]]`; índice unique no par | id numérico |
+| `media_files` + bucket `media` | arquivos enviados; o arquivo é servido só para o dono | nome do arquivo |
+| `events` | auditoria (o sino), uma linha por escrita | id numérico |
+| `drive_files`, `drive_state` | estado do export para o Drive | `note_id` / `<user_id>_<chave>` |
+| `counters` | contador de id por família (incremento atômico) | nome da família |
+
+Convenções que valem a pena saber antes de mexer:
+
+- **Sem cascata no servidor**: apagar caderno/nota/usuário é código nosso (`purge_user` no admin), em
+  ordem, idempotente.
+- **Escrita + auditoria no mesmo commit** via transação do Appwrite; linha repetida ou índice único
+  violado aparece no commit e vira `Conflict`.
+- **Agregação é nossa**: o Appwrite não tem `GROUP BY`/`JOIN`, então contagens, afinidade e busca
+  filtram em Python sobre uma foto curta por usuário (`store().snapshot`).
+- **Upload**: o bucket está limitado a **30 MB** pelo `_APP_STORAGE_LIMIT` do servidor; para os 256 MB
+  do app é preciso subir essa variável no `.env` do Appwrite e recriar o stack.
+- **Backup** passa a ser do Appwrite: `mysqldump` do banco + volumes `appwrite-uploads` e o `.env`
+  (`_APP_OPENSSL_KEY_V1`). Os tokens do Drive continuam em `backend/data/drive_*.json`.
+
+Ferramentas em `backend/tools/`: `appwrite_schema.py` (schema como código), `reset_appwrite.py`
+(zera tabelas, bucket, contadores e sessões, e recria só o admin — `--dry-run` mostra antes),
+`migrate_sqlite.py` (SQLite → Appwrite, idempotente), `parity_check.py` (grava/repete um roteiro de
+requisições e compara as respostas), `test_appwrite_schema.py` (idempotência offline) e
+`test_store_live.py` (a camada de dados contra a instância real).
 
 ## Usuários
 
@@ -208,6 +258,9 @@ abre o navegador para autorizar e guarda o token em `backend/data/` (pasta fora 
 a pedir a conexão.
 
 ## Modelo de dados
+
+O modelo lógico é o de sempre (abaixo); o de-para físico com as tabelas do Appwrite, as chaves e as
+permissões está em [Dados](#dados).
 
 ```
 users ──< sessions

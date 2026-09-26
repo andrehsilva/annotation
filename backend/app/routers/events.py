@@ -1,14 +1,13 @@
-"""The activity feed behind the bell: the last few actions, plus how many are unread."""
+"""O feed de atividade atrás da campainha: as últimas ações e quantas ainda não foram vistas."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from sqlalchemy.orm import Session
 
 from .. import deps, events
-from ..database import get_db
-from ..models import User
 from ..schemas import EventFeed, EventOut
+from ..store import Store
+from ..store.documents import Row
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -16,8 +15,8 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 @router.get("", response_model=EventFeed)
 def list_events(
     limit: int = Query(events.FEED_LIMIT, ge=1, le=events.FEED_MAX),
-    user: User = Depends(deps.current_user),
-    db: Session = Depends(get_db),
+    user: Row = Depends(deps.current_user),
+    db: Store = Depends(deps.get_db),
 ) -> EventFeed:
     rows = events.feed(db, user, limit)
     names = events.actors(db, rows)
@@ -40,9 +39,6 @@ def list_events(
 
 
 @router.post("/read", status_code=status.HTTP_204_NO_CONTENT)
-def mark_read(
-    user: User = Depends(deps.current_user), db: Session = Depends(get_db)
-) -> Response:
+def mark_read(user: Row = Depends(deps.current_user), db: Store = Depends(deps.get_db)) -> Response:
     events.mark_seen(db, user)
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

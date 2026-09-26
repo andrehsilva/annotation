@@ -1,0 +1,42 @@
+{
+  "body": {
+    "hits": [
+      {
+        "id": "<id:caderno>",
+        "kind": "notebook",
+        "note_id": null,
+        "notebook_id": "<id:caderno>",
+        "snippet": "caderno temporário de tools/parity_check.py",
+        "title": "parity-check"
+      },
+      {
+        "id": "<id:tag>",
+        "kind": "tag",
+        "note_id": null,
+        "notebook_id": null,
+        "snippet": "1 notas",
+        "title": "<tag:nome>"
+      },
+      {
+        "id": "<id:nota>",
+        "kind": "note",
+        "note_id": "<id:nota>",
+        "notebook_id": "<id:caderno>",
+        "snippet": "nota alvo do vínculo",
+        "title": "parity-alvo"
+      },
+      {
+        "id": "<id:nota>",
+        "kind": "note",
+        "note_id": "<id:nota>",
+        "notebook_id": "<id:caderno>",
+        "snippet": "print(2)",
+        "title": "parity-nota"
+      }
+    ],
+    "query": "parity"
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "busca"
+}

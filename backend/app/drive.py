@@ -15,7 +15,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 
-from .database import DATA_DIR
+from .config import DATA_DIR
 
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 

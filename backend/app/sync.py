@@ -2,6 +2,10 @@
 
 One-way and non-destructive — the app writes and renames, never deletes. Each note keeps its own
 row in `drive_files`, so a run compares checksums locally and only touches what actually changed.
+
+O dado vem todo do `store().snapshot(user_id)`: o Appwrite não tem `JOIN`, então a foto do usuário
+traz cadernos, notas, blocos, tags e vínculos de uma vez, e o markdown é montado em memória. Os
+tokens do Google continuam em arquivo (`drive_client.<id>.json`, `drive_token.<id>.json`).
 """
 
 from __future__ import annotations
@@ -11,23 +15,24 @@ import json
 import mimetypes
 import threading
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
+from appwrite.exception import AppwriteException
 from google.auth.exceptions import RefreshError, TransportError
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
 
-from . import acl, drive
-from .database import MEDIA_DIR, SessionLocal
+from . import drive
 from .markdown import MEDIA_PREFIX, UNTITLED, file_stem, note_markdown
-from .models import Block, BlockLink, DriveFile, DriveState, Note, NoteRelation, Notebook, utcnow
 from .schemas import DriveStatus, SyncSummary
+from .store import BUCKET_ID, Store, documents, store
+from .store.documents import Row
+from .values import utcnow
 
 ROOT_FOLDER = "NotAI"
 MEDIA_FOLDER = "_media"
@@ -52,6 +57,9 @@ CONNECTION_KEYS = (
     "last_error",
 )
 
+# A foto do usuário: as listas que o `snapshot` devolve, linha a linha no formato do app.
+Photo = dict[str, list[Any]]
+
 # One export lock and one debounce timer per user; `_guard` is the only lock touched by every user.
 _guard = threading.Lock()
 _locks: dict[int, threading.Lock] = {}
@@ -66,20 +74,26 @@ class Busy(Exception):
 # ------------------------------------------------------------------- state
 
 
-def _get(db: Session, user_id: int, key: str, default: str = "") -> str:
-    row = db.get(DriveState, (user_id, key))
-    return row.value if row is not None else default
+def _state_id(user_id: int, key: str) -> str:
+    """Chave composta do `drive_state` é o rowId: `<user_id>_<chave>`."""
+    return f"{user_id}_{key}"
 
 
-def _set(db: Session, user_id: int, key: str, value: str) -> None:
-    row = db.get(DriveState, (user_id, key))
-    if row is None:
-        db.add(DriveState(user_id=user_id, key=key, value=value))
+def _get(db: Store, user_id: int, key: str, default: str = "") -> str:
+    row = db.get("drive_state", _state_id(user_id, key))
+    return (row or {}).get("value") or default
+
+
+def _set(db: Store, user_id: int, key: str, value: str) -> None:
+    """Linha de servidor (sem permissão de cliente): só a API key lê o estado do export."""
+    row_id = _state_id(user_id, key)
+    if db.get("drive_state", row_id) is None:
+        db.create("drive_state", row_id, {"user_id": str(user_id), "key": key, "value": value})
     else:
-        row.value = value
+        db.update("drive_state", row_id, {"value": value})
 
 
-def _json_state(db: Session, user_id: int, key: str, default: object) -> object:
+def _json_state(db: Store, user_id: int, key: str, default: object) -> object:
     """Parsed JSON state, falling back to `default` when absent or corrupted."""
     raw = _get(db, user_id, key)
     if not raw:
@@ -90,7 +104,8 @@ def _json_state(db: Session, user_id: int, key: str, default: object) -> object:
         return default
 
 
-def status(db: Session, user_id: int) -> DriveStatus:
+def status(db: Store, user_id: int) -> DriveStatus:
+    """Mesmo formato de antes; o estado agora mora em `drive_state`, não numa sessão de banco."""
     summary = _json_state(db, user_id, "last_summary", None)
     return DriveStatus(
         connected=drive.is_connected(user_id),
@@ -103,19 +118,15 @@ def status(db: Session, user_id: int) -> DriveStatus:
     )
 
 
-def set_auto_sync(db: Session, user_id: int, enabled: bool) -> None:
+def set_auto_sync(db: Store, user_id: int, enabled: bool) -> None:
     _set(db, user_id, AUTO_SYNC_KEY, "on" if enabled else "off")
-    db.commit()
 
 
-def disconnect(db: Session, user_id: int) -> None:
+def disconnect(db: Store, user_id: int) -> None:
     """Forget the token and every cached Drive id; Drive itself keeps its files."""
     drive.disconnect(user_id)
     for key in CONNECTION_KEYS:
-        row = db.get(DriveState, (user_id, key))
-        if row is not None:
-            db.delete(row)
-    db.commit()
+        db.delete("drive_state", _state_id(user_id, key))
 
 
 # --------------------------------------------------------------- scheduling
@@ -148,9 +159,8 @@ def schedule_sync(user_id: int, delay: int = DEFAULT_DELAY) -> None:
     """Debounce that user's export: every write restarts the timer, so a burst becomes one run."""
     if not drive.is_connected(user_id):
         return
-    with SessionLocal() as db:
-        if _get(db, user_id, AUTO_SYNC_KEY, AUTO_SYNC_DEFAULT) != "on":
-            return
+    if _get(store(), user_id, AUTO_SYNC_KEY, AUTO_SYNC_DEFAULT) != "on":
+        return
     with _guard:
         timer = _timers.get(user_id)
         if timer is not None:
@@ -171,11 +181,10 @@ def _run_background(user_id: int) -> None:
     try:
         with _guard:
             _running.add(user_id)
-        with SessionLocal() as db:
-            try:
-                export_notes(db, user_id)
-            except Exception as error:  # noqa: BLE001 - a background thread must not die
-                _record_error(user_id, error)
+        try:
+            export_notes(store(), user_id)
+        except Exception as error:  # noqa: BLE001 - a background thread must not die
+            _record_error(user_id, error)
     finally:
         with _guard:
             _running.discard(user_id)
@@ -183,9 +192,7 @@ def _run_background(user_id: int) -> None:
 
 
 def _record_error(user_id: int, error: BaseException) -> None:
-    with SessionLocal() as db:
-        record_failure(db, user_id, error)
-        db.commit()
+    record_failure(store(), user_id, error)
 
 
 def error_message(error: BaseException) -> str:
@@ -200,7 +207,7 @@ def error_message(error: BaseException) -> str:
     return str(error) or type(error).__name__
 
 
-def record_failure(db: Session, user_id: int, error: BaseException) -> str:
+def record_failure(db: Store, user_id: int, error: BaseException) -> str:
     """Store why a run failed; a refused refresh also drops the dead token."""
     if isinstance(error, RefreshError):
         drive.disconnect(user_id)
@@ -212,79 +219,73 @@ def record_failure(db: Session, user_id: int, error: BaseException) -> str:
 # ------------------------------------------------------------------ export
 
 
-def export_notes(db: Session, user_id: int) -> SyncSummary:
+def export_notes(db: Store, user_id: int) -> SyncSummary:
     """Send every note this user can read whose markdown changed and record the run."""
     try:
         return _export(db, user_id)
     except Exception as error:
-        db.rollback()
+        # Sem transação para desfazer: cada linha já gravada é fato consumado, e o motivo da parada
+        # fica no estado do export para o painel mostrar.
         record_failure(db, user_id, error)
-        db.commit()
         raise
 
 
-def _export(db: Session, user_id: int) -> SyncSummary:
+def _export(db: Store, user_id: int) -> SyncSummary:
     service = drive.service(user_id)
+    photo = _photo(db, user_id)
+    notebooks = _notebooks(db, photo)
+    notes = photo["notes"]
+    blocks = _blocks_by_note(photo["blocks"])
+    tags = _tag_names(photo)
 
     root_id, created = _ensure_root(service, db, user_id)
     folders_created = int(created)
-    folders, created = _notebook_folders(service, db, user_id, root_id)
+    folders, created = _notebook_folders(service, db, user_id, root_id, notebooks)
     folders_created += created
 
-    notes = db.scalars(
-        select(Note)
-        .where(Note.notebook_id.in_(acl.readable_notebook_ids(user_id)))
-        .options(
-            selectinload(Note.notebook), selectinload(Note.blocks), selectinload(Note.tags)
-        )
-    ).all()
     names = _file_names(notes)
-    media_links, media_sent, skipped_media, errors = _media(service, db, user_id, root_id)
-    links = _link_titles(db, user_id)
+    media_links, media_sent, skipped_media, errors = _media(service, db, user_id, root_id, photo)
+    links = _link_titles(photo)
 
     notes_sent = 0
     notes_unchanged = 0
     for note in notes:
+        notebook = notebooks.get(note.notebook_id)
         folder = folders.get(note.notebook_id)
-        if folder is None:  # the notebook went away mid-run
+        if notebook is None or folder is None:  # the notebook went away mid-run
             continue
         filename = names[note.id]
         path = f"{folder['name']}/{filename}"
         related, mentions = links.get(note.id, ((), ()))
-        markdown = note_markdown(note, media_links, related, mentions)
+        markdown = note_markdown(
+            note,
+            blocks.get(note.id, []),
+            notebook_title=notebook.title,
+            tags=tags.get(note.id, []),
+            media_links=media_links,
+            related=related,
+            mentions=mentions,
+        )
         checksum = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
         try:
-            row = db.scalar(select(DriveFile).where(DriveFile.note_id == note.id))
+            row = db.get("drive_files", note.id)
             if row is None:
                 file_id = _upload_markdown(service, markdown, filename, folder["id"])
-                db.add(
-                    DriveFile(
-                        note_id=note.id,
-                        file_id=file_id,
-                        folder_id=folder["id"],
-                        drive_path=path,
-                        checksum=checksum,
-                    )
-                )
+                _remember(db, note.id, file_id, folder["id"], path, checksum, create=True)
                 notes_sent += 1
             else:
-                moved = row.folder_id != folder["id"] or row.drive_path != path
-                changed = row.checksum != checksum
+                moved = row.get("folder_id") != folder["id"] or row.get("drive_path") != path
+                changed = row.get("checksum") != checksum
                 if moved:
-                    _move(service, row.file_id, filename, folder["id"], row.folder_id)
-                    row.folder_id = folder["id"]
-                    row.drive_path = path
+                    _move(service, row["file_id"], filename, folder["id"], row.get("folder_id"))
                 if changed:
-                    _replace_markdown(service, row.file_id, markdown)
-                    row.checksum = checksum
+                    _replace_markdown(service, row["file_id"], markdown)
                 if moved or changed:
-                    row.synced_at = utcnow()
+                    _remember(db, note.id, row["file_id"], folder["id"], path, checksum, create=False)
                     notes_sent += 1
                 else:
                     notes_unchanged += 1
-            db.commit()  # per note: the run stays consistent if it is interrupted
         except Exception as error:  # noqa: BLE001 - reported in the summary, then stop
-            db.rollback()
             errors.append(f"{filename}: {error_message(error)}")
             break
 
@@ -301,41 +302,109 @@ def _export(db: Session, user_id: int) -> SyncSummary:
     _set(db, user_id, "last_sync_at", at)
     _set(db, user_id, "last_summary", summary.model_dump_json())
     _set(db, user_id, "last_error", "; ".join(errors))
-    db.commit()
     return summary
 
 
-def _link_titles(db: Session, user_id: int) -> dict[int, tuple[list[str], list[str]]]:
-    """Per note: the titles it relates to, then the ones it cites in its blocks."""
-    titles: dict[int, tuple[list[str], list[str]]] = defaultdict(lambda: ([], []))
-    readable = acl.readable_note_ids(user_id)
-    relations = db.scalars(
-        select(NoteRelation)
-        .where(NoteRelation.source_id.in_(readable), NoteRelation.target_id.in_(readable))
-        .options(
-            selectinload(NoteRelation.source), selectinload(NoteRelation.target)
-        )
-    ).all()
-    for relation in relations:
-        titles[relation.source_id][0].append(relation.target.title or UNTITLED)
-        titles[relation.target_id][0].append(relation.source.title or UNTITLED)
+def _remember(
+    db: Store,
+    note_id: int,
+    file_id: str,
+    folder_id: str,
+    path: str,
+    checksum: str,
+    *,
+    create: bool,
+) -> None:
+    """Uma linha por nota (`rowId` = id da nota): é ela que diz o que já está no Drive."""
+    data = {
+        "file_id": file_id,
+        "folder_id": folder_id,
+        "drive_path": path,
+        "checksum": checksum,
+        "synced_at": documents.to_iso(utcnow()),
+    }
+    if create:
+        db.create("drive_files", note_id, data)
+    else:
+        db.update("drive_files", note_id, data)
 
-    rows = db.execute(
-        select(Block.note_id, Note.title)
-        .select_from(BlockLink)
-        .join(Block, Block.id == BlockLink.block_id)
-        .join(Note, Note.id == BlockLink.note_id)
-        .where(Block.note_id.in_(readable))
-        .order_by(Block.note_id, Block.position, BlockLink.id)
-    ).all()
-    for note_id, title in rows:
-        label = title or UNTITLED
-        if label not in titles[note_id][1]:
-            titles[note_id][1].append(label)
+
+# ------------------------------------------------------------------- dados
+
+
+def _photo(db: Store, user_id: int) -> Photo:
+    """A foto do usuário, linha a linha no formato do app (`note.title`, `block.position`)."""
+    return {
+        table: [row if isinstance(row, Row) else documents.normalize(table, row) for row in rows]
+        for table, rows in db.snapshot(user_id).items()
+    }
+
+
+def _notebooks(db: Store, photo: Photo) -> dict[int, Row]:
+    """Todo caderno legível; o snapshot traz só os próprios, o compartilhado vem por id."""
+    known = {row.id: row for row in photo["notebooks"]}
+    wanted = {row.notebook_id for row in photo["notes"]} | {
+        documents.to_int(row["notebook_id"]) for row in photo["notebook_members"]
+    }
+    for notebook_id in sorted(wanted - known.keys()):
+        row = documents.get("notebooks", notebook_id)
+        if row is not None:
+            known[notebook_id] = row
+    return known
+
+
+def _blocks_by_note(rows: Iterable[Row]) -> dict[int, list[Row]]:
+    """Blocos por nota na ordem do editor: é ela que dá o mesmo markdown (e o mesmo checksum)."""
+    grouped: dict[int, list[Row]] = defaultdict(list)
+    for row in rows:
+        grouped[row.note_id].append(row)
+    return {
+        note_id: sorted(item, key=lambda row: (row.position, row.id))
+        for note_id, item in grouped.items()
+    }
+
+
+def _tag_names(photo: Photo) -> dict[int, list[str]]:
+    """Nomes das tags por nota, em ordem alfabética — o `order_by(Tag.name)` de antes."""
+    names = {row.id: row.name for row in photo["tags"]}
+    grouped: dict[int, list[str]] = defaultdict(list)
+    for row in photo["note_tags"]:
+        name = names.get(documents.to_int(row["tag_id"]))
+        if name:
+            grouped[documents.to_int(row["note_id"])].append(name)
+    return {note_id: sorted(item) for note_id, item in grouped.items()}
+
+
+def _link_titles(photo: Photo) -> dict[int, tuple[list[str], list[str]]]:
+    """Per note: the titles it relates to, then the ones it cites in its blocks."""
+    notes = {row.id: row for row in photo["notes"]}
+    blocks = {row.id: row for row in photo["blocks"]}
+    titles: dict[int, tuple[list[str], list[str]]] = defaultdict(lambda: ([], []))
+    for relation in photo["note_relations"]:
+        for source, target in (
+            (relation.source_id, relation.target_id),
+            (relation.target_id, relation.source_id),
+        ):
+            if source in notes and target in notes:
+                titles[source][0].append(notes[target].title or UNTITLED)
+
+    # Mesma ordem da consulta de antes: nota citante, posição do bloco, id do vínculo.
+    def _order(link: Row) -> tuple[int, int, int]:
+        block = blocks.get(link.block_id)
+        return (block.note_id, block.position, link.id) if block else (-1, 0, link.id)
+
+    for link in sorted(photo["block_links"], key=_order):
+        block = blocks.get(link.block_id)
+        if block is None:
+            continue
+        mentioned = notes.get(link.note_id)
+        label = (mentioned.title if mentioned else "") or UNTITLED
+        if label not in titles[block.note_id][1]:
+            titles[block.note_id][1].append(label)
     return titles
 
 
-def _file_names(notes: Sequence[Note]) -> dict[int, str]:
+def _file_names(notes: Sequence[Row]) -> dict[int, str]:
     """One deterministic file name per note; equal stems in a notebook both get their id."""
     stems = {note.id: file_stem(note.title, f"nota-{note.id}") for note in notes}
     shared = Counter((note.notebook_id, stems[note.id]) for note in notes)
@@ -349,30 +418,29 @@ def _file_names(notes: Sequence[Note]) -> dict[int, str]:
     }
 
 
-def _ensure_root(service, db: Session, user_id: int) -> tuple[str, bool]:
+# ------------------------------------------------------------------ folders
+
+
+def _ensure_root(service, db: Store, user_id: int) -> tuple[str, bool]:
     folder_id = _get(db, user_id, "root_folder_id")
     if folder_id:
         return folder_id, False
     folder_id = _create_folder(service, ROOT_FOLDER, None)
     _set(db, user_id, "root_folder_id", folder_id)
-    db.commit()
     return folder_id, True
 
 
 def _notebook_folders(
-    service, db: Session, user_id: int, root_id: str
+    service, db: Store, user_id: int, root_id: str, notebooks: dict[int, Row]
 ) -> tuple[dict[int, dict[str, str]], int]:
     """Folder per readable notebook, keyed by notebook id so renaming keeps the same folder."""
     known: dict[str, dict[str, str]] = _json_state(db, user_id, "notebook_folders", {})  # type: ignore[assignment]
     created = 0
-    notebooks = db.scalars(
-        select(Notebook).where(Notebook.id.in_(acl.readable_notebook_ids(user_id)))
-    ).all()
-    for notebook in notebooks:
-        name = file_stem(notebook.title, f"caderno-{notebook.id}")
-        entry = known.get(str(notebook.id))
+    for notebook_id, notebook in sorted(notebooks.items()):
+        name = file_stem(notebook.title, f"caderno-{notebook_id}")
+        entry = known.get(str(notebook_id))
         if entry is None:
-            known[str(notebook.id)] = {"id": _create_folder(service, name, root_id), "name": name}
+            known[str(notebook_id)] = {"id": _create_folder(service, name, root_id), "name": name}
             created += 1
         elif entry.get("name") != name:
             service.files().update(
@@ -380,32 +448,33 @@ def _notebook_folders(
             ).execute()
             entry["name"] = name
     _set(db, user_id, "notebook_folders", json.dumps(known))
-    db.commit()
     return {int(key): value for key, value in known.items()}, created
 
 
-def _ensure_media_folder(service, db: Session, user_id: int, root_id: str) -> str:
+def _ensure_media_folder(service, db: Store, user_id: int, root_id: str) -> str:
     folder_id = _json_state(db, user_id, "media_folder_id", "")
     if folder_id:
         return str(folder_id)
     folder_id = _create_folder(service, MEDIA_FOLDER, root_id)
     _set(db, user_id, "media_folder_id", folder_id)
-    db.commit()
     return folder_id
 
 
+def _create_folder(service, name: str, parent_id: str | None) -> str:
+    body: dict[str, object] = {"name": name, "mimeType": FOLDER_MIME}
+    if parent_id is not None:
+        body["parents"] = [parent_id]
+    return service.files().create(body=body, fields="id").execute()["id"]
+
+
+# -------------------------------------------------------------------- media
+
+
 def _media(
-    service, db: Session, user_id: int, root_id: str
+    service, db: Store, user_id: int, root_id: str, photo: Photo
 ) -> tuple[dict[str, str], int, int, list[str]]:
-    """Upload the local files these notes reference; returns `url -> Drive link` for the markdown."""
-    urls = db.scalars(
-        select(Block.url)
-        .where(
-            Block.url.like(f"{MEDIA_PREFIX}%"),
-            Block.note_id.in_(acl.readable_note_ids(user_id)),
-        )
-        .distinct()
-    ).all()
+    """Sobe os arquivos do bucket que estas notas citam; devolve `url -> link` para o markdown."""
+    urls = sorted({row.url for row in photo["blocks"] if row.url.startswith(MEDIA_PREFIX)})
     known: dict[str, dict[str, str]] = _json_state(db, user_id, "media_files", {})  # type: ignore[assignment]
     links: dict[str, str] = {}
     errors: list[str] = []
@@ -414,34 +483,49 @@ def _media(
     skipped = 0
 
     for url in urls:
+        name = Path(url).name
         cached = known.get(url)
         if cached and cached.get("link"):
             links[url] = cached["link"]
             continue
-        path = MEDIA_DIR / Path(url).name
-        if not path.is_file() or path.stat().st_size > MAX_MEDIA_BYTES:
+        row = _media_row(photo, name)
+        if row is None or row.size > MAX_MEDIA_BYTES:
+            skipped += 1
+            continue
+        data = _media_bytes(db, row.row_id)
+        if data is None or len(data) > MAX_MEDIA_BYTES:
             skipped += 1
             continue
         if folder_id is None:
             folder_id = _ensure_media_folder(service, db, user_id, root_id)
         try:
-            uploaded = _upload_media(service, path, folder_id)
+            uploaded = _upload_media(service, name, data, folder_id)
         except Exception as error:  # noqa: BLE001 - one bad file must not stop the export
-            errors.append(f"{path.name}: {error_message(error)}")
+            errors.append(f"{name}: {error_message(error)}")
             continue
         known[url] = uploaded
         links[url] = uploaded["link"]
         _set(db, user_id, "media_files", json.dumps(known))
-        db.commit()
         sent += 1
     return links, sent, skipped, errors
 
 
-def _create_folder(service, name: str, parent_id: str | None) -> str:
-    body: dict[str, object] = {"name": name, "mimeType": FOLDER_MIME}
-    if parent_id is not None:
-        body["parents"] = [parent_id]
-    return service.files().create(body=body, fields="id").execute()["id"]
+def _media_row(photo: Photo, filename: str) -> Row | None:
+    """A linha do arquivo: a foto traz as do dono, o resto (nota compartilhada) vem por id."""
+    for row in photo["media_files"]:
+        if row.filename == filename:
+            return row
+    return documents.media_by_filename(filename)
+
+
+def _media_bytes(db: Store, filename: str) -> bytes | None:
+    """Bytes do bucket; `None` quando só a linha sobrou (o arquivo não está mais lá)."""
+    try:
+        return db.storage.get_file_view(BUCKET_ID, filename)
+    except AppwriteException as error:
+        if error.code == 404:
+            return None
+        raise
 
 
 def _markdown_media(markdown: str) -> MediaIoBaseUpload:
@@ -475,18 +559,16 @@ def _move(service, file_id: str, name: str, folder_id: str, old_folder_id: str) 
     service.files().update(fileId=file_id, body={"name": name}, fields="id", **extra).execute()
 
 
-def _upload_media(service, path: Path, folder_id: str) -> dict[str, str]:
-    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    size = path.stat().st_size
-    with path.open("rb") as handle:
-        media = MediaIoBaseUpload(handle, mimetype=mime, resumable=size > RESUMABLE_ABOVE)
-        created = (
-            service.files()
-            .create(
-                body={"name": path.name, "parents": [folder_id]},
-                media_body=media,
-                fields="id,webViewLink",
-            )
-            .execute()
+def _upload_media(service, name: str, data: bytes, folder_id: str) -> dict[str, str]:
+    mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    media = MediaIoBaseUpload(BytesIO(data), mimetype=mime, resumable=len(data) > RESUMABLE_ABOVE)
+    created = (
+        service.files()
+        .create(
+            body={"name": name, "parents": [folder_id]},
+            media_body=media,
+            fields="id,webViewLink",
         )
+        .execute()
+    )
     return {"id": created["id"], "link": created["webViewLink"]}

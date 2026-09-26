@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
-from .. import acl, deps, services
-from ..database import get_db
-from ..models import Block, Note, NoteRelation, Notebook, Tag, User
+from .. import deps, services
 from ..schemas import SearchResults, Stats, empty_counts
+from ..store import Store
+from ..store.documents import Row
 
 router = APIRouter(prefix="/api", tags=["search"])
 
@@ -16,47 +14,38 @@ router = APIRouter(prefix="/api", tags=["search"])
 def search(
     q: str = Query(default="", max_length=120),
     limit: int = Query(default=8, ge=1, le=30),
-    user: User = Depends(deps.current_user),
-    db: Session = Depends(get_db),
+    user: Row = Depends(deps.current_user),
+    db: Store = Depends(deps.get_db),
 ) -> SearchResults:
     return SearchResults(query=q, hits=services.search(db, user.id, q, limit))
 
 
 @router.get("/stats", response_model=Stats)
 def stats(
-    user: User = Depends(deps.current_user), db: Session = Depends(get_db)
+    user: Row = Depends(deps.current_user), db: Store = Depends(deps.get_db)
 ) -> Stats:
-    """Totais do painel: só o que é do dono, nunca o banco inteiro."""
-    rows = db.execute(
-        select(Block.type, func.count(Block.id))
-        .where(Block.note_id.in_(acl.readable_note_ids(user.id)))
-        .group_by(Block.type)
-    ).all()
+    """Totais do painel: só o que é do dono, nunca o banco inteiro.
+
+    A foto do usuário já é a lista do que ele alcança (cadernos próprios + onde é membro, e as
+    notas/blocos desses cadernos), então contar é varrer essa foto — não existe `GROUP BY` aqui.
+    """
+    photo = db.snapshot(user.id)
+    notebook_ids = {row.id for row in photo["notebooks"]} | {
+        row.notebook_id for row in photo["notebook_members"]
+    }
+    note_ids = {row.id for row in photo["notes"]}
     counts = empty_counts()
-    for block_type, total in rows:
-        counts[block_type] = total
+    for block in photo["blocks"]:
+        counts[block.type] = counts.get(block.type, 0) + 1
     return Stats(
-        notebooks=db.scalar(
-            select(func.count(Notebook.id)).where(
-                Notebook.id.in_(acl.readable_notebook_ids(user.id))
-            )
-        )
-        or 0,
-        notes=db.scalar(
-            select(func.count(Note.id)).where(Note.id.in_(acl.readable_note_ids(user.id)))
-        )
-        or 0,
-        blocks=db.scalar(
-            select(func.count(Block.id)).where(Block.note_id.in_(acl.readable_note_ids(user.id)))
-        )
-        or 0,
-        tags=db.scalar(select(func.count(Tag.id)).where(Tag.owner_id == user.id)) or 0,
-        relations=db.scalar(
-            select(func.count(NoteRelation.id)).where(
-                NoteRelation.source_id.in_(acl.readable_note_ids(user.id)),
-                NoteRelation.target_id.in_(acl.readable_note_ids(user.id)),
-            )
-        )
-        or 0,
+        notebooks=len(notebook_ids),
+        notes=len(note_ids),
+        blocks=len(photo["blocks"]),
+        tags=len(photo["tags"]),
+        relations=sum(
+            1
+            for row in photo["note_relations"]
+            if row.source_id in note_ids and row.target_id in note_ids
+        ),
         counts=counts,
     )

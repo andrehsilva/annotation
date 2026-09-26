@@ -1,0 +1,47 @@
+{
+  "body": {
+    "blocks": [
+      {
+        "caption": "",
+        "created_at": "<timestamp>",
+        "id": "<id:bloco>",
+        "language": "python",
+        "note_id": "<id:nota>",
+        "position": 0,
+        "text": "print(2)",
+        "type": "code",
+        "updated_at": "<timestamp>",
+        "url": ""
+      },
+      {
+        "caption": "",
+        "created_at": "<timestamp>",
+        "id": "<id:bloco>",
+        "language": "",
+        "note_id": "<id:nota>",
+        "position": 1,
+        "text": "texto inicial do teste de paridade",
+        "type": "text",
+        "updated_at": "<timestamp>",
+        "url": ""
+      }
+    ],
+    "created_at": "<timestamp>",
+    "id": "<id:nota>",
+    "notebook_id": "<id:caderno>",
+    "position": 1,
+    "relations": [],
+    "tags": [
+      {
+        "color": "#1f6feb",
+        "id": "<id:tag>",
+        "name": "<tag:nome>"
+      }
+    ],
+    "title": "parity-nota",
+    "updated_at": "<timestamp>"
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "aplicar_tag"
+}

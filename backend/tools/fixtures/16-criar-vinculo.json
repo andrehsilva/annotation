@@ -1,0 +1,22 @@
+{
+  "body": {
+    "backlinks": [],
+    "mentions": [],
+    "relations": [
+      {
+        "id": "<id:tag>",
+        "label": "depende",
+        "other": {
+          "id": "<id:nota>",
+          "notebook_id": "<id:caderno>",
+          "notebook_title": "parity-check",
+          "title": "parity-alvo"
+        },
+        "outgoing": true
+      }
+    ]
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "criar_vinculo"
+}

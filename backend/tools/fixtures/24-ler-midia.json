@@ -1,0 +1,10 @@
+{
+  "body": {
+    "content_type": "image/png",
+    "sha256": "f3cc328a945d80e83f3e1f29fb889e2b1c18b4d9497c70ebee2f8d51aaba584e",
+    "size": 66
+  },
+  "kind": "bytes",
+  "status": 200,
+  "step": "ler_midia"
+}

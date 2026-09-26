@@ -1,0 +1,27 @@
+services:
+  api:
+    build: ../backend
+    environment:
+      APPWRITE_ENDPOINT: ${APPWRITE_ENDPOINT}
+      APPWRITE_PROJECT_ID: ${APPWRITE_PROJECT_ID}
+      APPWRITE_DATABASE_ID: ${APPWRITE_DATABASE_ID}
+      APPWRITE_MEDIA_BUCKET_ID: ${APPWRITE_MEDIA_BUCKET_ID}
+      APPWRITE_API_KEY: ${APPWRITE_API_KEY}
+      CADERNO_COOKIE_SECURE: ${CADERNO_COOKIE_SECURE}
+      CADERNO_DATA_DIR: ${CADERNO_DATA_DIR}
+    volumes:
+      - anotai-data:/data
+    expose:
+      - "8000"
+
+  web:
+    build: ../frontend
+    depends_on:
+      - api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # o server block do console do Appwrite aponta para o host
+    expose:
+      - "80"
+
+volumes:
+  anotai-data:

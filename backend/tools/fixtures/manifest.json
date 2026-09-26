@@ -1,0 +1,213 @@
+{
+  "base": "http://127.0.0.1:8001",
+  "masked": {
+    "<id:bloco>": [
+      "6",
+      "7",
+      "8"
+    ],
+    "<id:caderno>": [
+      "2"
+    ],
+    "<id:midia>": [
+      "d17e95ec9e4946c6a641e43bb651645c.png"
+    ],
+    "<id:nota>": [
+      "3",
+      "4",
+      "5"
+    ],
+    "<id:tag>": [
+      "1"
+    ],
+    "<id:vinculo>": [
+      "1"
+    ],
+    "<tag:nome>": [
+      "parity-434b2c66"
+    ]
+  },
+  "recorded_at": "2026-09-25T23:58:02+00:00",
+  "steps": [
+    {
+      "file": "01-health.json",
+      "index": 1,
+      "name": "health",
+      "status": 200
+    },
+    {
+      "file": "02-login.json",
+      "index": 2,
+      "name": "login",
+      "status": 200
+    },
+    {
+      "file": "03-me.json",
+      "index": 3,
+      "name": "me",
+      "status": 200
+    },
+    {
+      "file": "04-me-sem-cookie.json",
+      "index": 4,
+      "name": "me_sem_cookie",
+      "status": 401
+    },
+    {
+      "file": "05-stats-inicial.json",
+      "index": 5,
+      "name": "stats_inicial",
+      "status": 200
+    },
+    {
+      "file": "06-criar-caderno.json",
+      "index": 6,
+      "name": "criar_caderno",
+      "status": 201
+    },
+    {
+      "file": "07-criar-nota.json",
+      "index": 7,
+      "name": "criar_nota",
+      "status": 201
+    },
+    {
+      "file": "08-criar-bloco.json",
+      "index": 8,
+      "name": "criar_bloco",
+      "status": 201
+    },
+    {
+      "file": "09-editar-bloco.json",
+      "index": 9,
+      "name": "editar_bloco",
+      "status": 200
+    },
+    {
+      "file": "10-listar-blocos.json",
+      "index": 10,
+      "name": "listar_blocos",
+      "status": 200
+    },
+    {
+      "file": "11-reordenar-blocos.json",
+      "index": 11,
+      "name": "reordenar_blocos",
+      "status": 200
+    },
+    {
+      "file": "12-criar-tag.json",
+      "index": 12,
+      "name": "criar_tag",
+      "status": 201
+    },
+    {
+      "file": "13-aplicar-tag.json",
+      "index": 13,
+      "name": "aplicar_tag",
+      "status": 200
+    },
+    {
+      "file": "14-listar-tags.json",
+      "index": 14,
+      "name": "listar_tags",
+      "status": 200
+    },
+    {
+      "file": "15-criar-nota-alvo.json",
+      "index": 15,
+      "name": "criar_nota_alvo",
+      "status": 201
+    },
+    {
+      "file": "16-criar-vinculo.json",
+      "index": 16,
+      "name": "criar_vinculo",
+      "status": 200
+    },
+    {
+      "file": "17-relacionadas.json",
+      "index": 17,
+      "name": "relacionadas",
+      "status": 200
+    },
+    {
+      "file": "18-ler-nota.json",
+      "index": 18,
+      "name": "ler_nota",
+      "status": 200
+    },
+    {
+      "file": "19-listar-notas.json",
+      "index": 19,
+      "name": "listar_notas",
+      "status": 200
+    },
+    {
+      "file": "20-busca.json",
+      "index": 20,
+      "name": "busca",
+      "status": 200
+    },
+    {
+      "file": "21-stats.json",
+      "index": 21,
+      "name": "stats",
+      "status": 200
+    },
+    {
+      "file": "22-eventos.json",
+      "index": 22,
+      "name": "eventos",
+      "status": 200
+    },
+    {
+      "file": "23-subir-midia.json",
+      "index": 23,
+      "name": "subir_midia",
+      "status": 201
+    },
+    {
+      "file": "24-ler-midia.json",
+      "index": 24,
+      "name": "ler_midia",
+      "status": 200
+    },
+    {
+      "file": "25-midia-inexistente.json",
+      "index": 25,
+      "name": "midia_inexistente",
+      "status": 404
+    },
+    {
+      "file": "26-nota-inexistente.json",
+      "index": 26,
+      "name": "nota_inexistente",
+      "status": 404
+    },
+    {
+      "file": "27-apagar-nota.json",
+      "index": 27,
+      "name": "apagar_nota",
+      "status": 204
+    },
+    {
+      "file": "28-apagar-tag.json",
+      "index": 28,
+      "name": "apagar_tag",
+      "status": 204
+    },
+    {
+      "file": "29-apagar-caderno.json",
+      "index": 29,
+      "name": "apagar_caderno",
+      "status": 204
+    },
+    {
+      "file": "30-stats-depois.json",
+      "index": 30,
+      "name": "stats_depois",
+      "status": 200
+    }
+  ]
+}

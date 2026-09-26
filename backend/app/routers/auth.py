@@ -2,21 +2,22 @@
 
 from __future__ import annotations
 
+import os
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import delete, func, select
-from sqlalchemy.orm import Session
 
-from .. import security
-from ..database import get_db
-from ..deps import COOKIE_NAME, current_user
-from ..models import SessionToken, User, utcnow
+from .. import security, values
+from ..deps import COOKIE_NAME, current_user, get_db
 from ..schemas import CredentialsIn, PasswordChangeIn, UserOut
+from ..store import Store, documents, equal
+from ..store.documents import Row
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 COOKIE_MAX_AGE = int(security.SESSION_TTL.total_seconds())
+# Em produção o cookie só viaja em HTTPS; em dev (http://localhost) o padrão desligado deixa entrar.
+COOKIE_SECURE = os.environ.get("CADERNO_COOKIE_SECURE", "").strip().lower() in ("1", "true")
 
 
 class Attempts:
@@ -51,9 +52,9 @@ attempts = Attempts()
 
 
 @router.post("/login", response_model=UserOut)
-def login(payload: CredentialsIn, response: Response, db: Session = Depends(get_db)) -> UserOut:
+def login(payload: CredentialsIn, response: Response, db: Store = Depends(get_db)) -> UserOut:
     attempts.check(payload.email)
-    user = db.scalar(select(User).where(func.lower(User.email) == payload.email))
+    user = documents.user_by_email(payload.email)
     # Always hash something, so "e-mail não existe" and "senha errada" cost the same.
     stored = user.password_hash if user else security.DUMMY_HASH
     if not security.verify_password(payload.password, stored) or user is None:
@@ -63,38 +64,43 @@ def login(payload: CredentialsIn, response: Response, db: Session = Depends(get_
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Usuário desativado")
     attempts.clear(payload.email)
     token = security.new_session_token()
-    now = utcnow()
-    db.add(
-        SessionToken(
-            token_hash=security.hash_token(token),
-            user_id=user.id,
-            created_at=now,
-            expires_at=now + security.SESSION_TTL,
-            last_seen_at=now,
-        )
+    now = values.utcnow()
+    # Linha de servidor: sem permissão de cliente, só a API key lê o hash da sessão.
+    documents.write(
+        "sessions",
+        documents.session_id(security.hash_token(token)),
+        {
+            "user_id": str(user.id),
+            "created_at": now,
+            "expires_at": now + security.SESSION_TTL,
+            "last_seen_at": now,
+        },
+        owner_id=None,
     )
-    user.last_login_at = now
-    db.commit()
+    user = documents.change("users", user.id, {"last_login_at": now}, owner_id=None)
     response.set_cookie(
-        COOKIE_NAME, token, max_age=COOKIE_MAX_AGE, httponly=True, samesite="lax", path="/"
+        COOKIE_NAME,
+        token,
+        max_age=COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        path="/",
     )
     return UserOut.model_validate(user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response, db: Session = Depends(get_db)) -> Response:
+def logout(request: Request, response: Response, db: Store = Depends(get_db)) -> Response:
     token = request.cookies.get(COOKIE_NAME)
     if token:
-        db.execute(
-            delete(SessionToken).where(SessionToken.token_hash == security.hash_token(token))
-        )
-        db.commit()
+        db.delete("sessions", documents.session_id(security.hash_token(token)))
     response.delete_cookie(COOKIE_NAME, path="/")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(current_user)) -> UserOut:
+def me(user: Row = Depends(current_user)) -> UserOut:
     return UserOut.model_validate(user)
 
 
@@ -102,18 +108,18 @@ def me(user: User = Depends(current_user)) -> UserOut:
 def change_password(
     payload: PasswordChangeIn,
     request: Request,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
+    user: Row = Depends(current_user),
+    db: Store = Depends(get_db),
 ) -> Response:
     """Own password only: the admin resets other people's, this is the self-service door."""
     if not security.verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Senha atual incorreta")
-    user.password_hash = security.hash_password(payload.new_password)
-    keep = security.hash_token(request.cookies.get(COOKIE_NAME, ""))
-    db.execute(
-        delete(SessionToken).where(
-            SessionToken.user_id == user.id, SessionToken.token_hash != keep
-        )
+    documents.change(
+        "users", user.id, {"password_hash": security.hash_password(payload.new_password)}, owner_id=None
     )
-    db.commit()
+    # A sessão atual fica: o rowId das outras é o hash de cada token, então o filtro é aqui.
+    keep = security.hash_token(request.cookies.get(COOKIE_NAME, ""))
+    for session in documents.all_rows("sessions", [equal("user_id", str(user.id))]):
+        if session.row_id != keep:
+            db.delete("sessions", session.row_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

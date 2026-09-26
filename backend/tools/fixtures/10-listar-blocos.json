@@ -1,0 +1,20 @@
+{
+  "body": [
+    {
+      "caption": "",
+      "id": "<id:bloco>",
+      "language": "python",
+      "note_id": "<id:nota>",
+      "note_title": "parity-nota",
+      "notebook_id": "<id:caderno>",
+      "notebook_title": "parity-check",
+      "text": "print(2)",
+      "type": "code",
+      "updated_at": "<timestamp>",
+      "url": ""
+    }
+  ],
+  "kind": "json",
+  "status": 200,
+  "step": "listar_blocos"
+}

@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Iterable
 
-from sqlalchemy import func, select
-
-from app import acl, bootstrap
-from app.database import Base, SessionLocal, engine
-from app.models import Block, Note, NoteRelation, Notebook, Tag, User, notebook_members
+from app import bootstrap, events, links, services
+from app.store import documents, equal, store
+from app.store.documents import Row
 
 NOTEBOOKS: list[dict] = [
     {
@@ -86,83 +85,251 @@ NOTEBOOKS: list[dict] = [
 ]
 
 
-def seed_owner(email: str | None) -> User:
+def seed_owner(email: str | None) -> Row:
     """O dono dos dados de demonstração: o e-mail pedido ou, por padrão, o admin da casa."""
     if email is None:
         return bootstrap.ensure_admin()
-    with SessionLocal() as db:
-        user = db.query(User).filter(func.lower(User.email) == email.strip().lower()).one_or_none()
+    user = documents.user_by_email(email)
     if user is None:
         sys.exit(f"[notai] usuário não encontrado: {email}")
     return user
 
 
+def _drop(table: str, column: str, values: Iterable[int]) -> None:
+    """Apaga as linhas de `table` cujo `column` está em `values`.
+
+    `equal` com vários valores é um OR e o servidor aceita `services.QUERY_VALUES` por chamada: os
+    ids vão em lotes desse tamanho. Sem FK nem cascata, a ordem das chamadas é a das dependências.
+    """
+    chunk = [str(value) for value in sorted(set(values))]
+    for start in range(0, len(chunk), services.QUERY_VALUES):
+        store().delete_where(table, [equal(column, *chunk[start : start + services.QUERY_VALUES])])
+
+
+def reset_user(user: Row) -> None:
+    """Apaga só os dados do usuário alvo, das folhas para a raiz.
+
+    O que entra na conta é o caderno que ele **possui** (a linha de membro com papel `owner`); o
+    caderno de outro dono em que ele seja convidado nunca entra, mesmo que ele seja membro dele.
+    """
+    photo = store().snapshot(user.id, fresh=True)
+    owned = {
+        member.notebook_id
+        for member in photo["notebook_members"]
+        if member.user_id == user.id and member.role == "owner"
+    }
+    notes = {note.id for note in photo["notes"] if note.notebook_id in owned}
+    blocks = {block.id for block in photo["blocks"] if block.note_id in notes}
+
+    # a cascata que o banco fazia, agora explícita: menções, tags e vínculos saem antes das linhas
+    # que os sustentam, e o evento de auditoria é o último da conta
+    _drop("block_links", "block_id", blocks)
+    _drop("block_links", "note_id", notes)
+    _drop("note_tags", "note_id", notes)
+    _drop("note_relations", "source_id", notes)
+    _drop("note_relations", "target_id", notes)
+    _drop("blocks", "$id", blocks)
+    _drop("notes", "$id", notes)
+    _drop("notebook_tags", "notebook_id", owned)
+    _drop("notebook_members", "notebook_id", owned)
+    _drop("notebooks", "$id", owned)
+    _drop("tags", "owner_id", [user.id])
+    _drop("events", "user_id", [user.id])
+    store().invalidate(user.id)  # a foto lida aqui ainda é a de antes deste reset
+
+
 def seed(reset: bool, email: str | None = None) -> None:
-    Base.metadata.create_all(engine)
     user = seed_owner(email)
-    with SessionLocal() as db:
-        if reset:
-            # Só o que é do usuário alvo: os cadernos que ele possui levam notas, blocos, menções e
-            # relações junto (FK ON DELETE CASCADE) e as tags saem pelo owner_id. Caderno de outro
-            # dono nunca entra na lista, mesmo que o usuário seja membro dele.
-            owned = select(notebook_members.c.notebook_id).where(
-                notebook_members.c.user_id == user.id,
-                notebook_members.c.role == "owner",
+    if reset:
+        reset_user(user)
+
+    tags: dict[str, Row] = {}
+
+    def tag(name: str) -> Row:
+        """Tag é do usuário: o mesmo nome em outra conta é outra tag (o `name_key` as separa).
+
+        O nome único por dono é o índice unique de `name_key`, e ele só aparece no commit: a
+        consulta vem antes para reaproveitar a tag existente em vez de bater no 409 lá na frente.
+        """
+        key = documents.tag_key(user.id, name)
+        found = tags.get(key)
+        if found is None:
+            existing = documents.many(
+                "tags", store().list_rows("tags", [equal("name_key", key)]).rows
             )
-            db.query(Notebook).filter(Notebook.id.in_(owned)).delete(synchronize_session=False)
-            db.query(Tag).filter(Tag.owner_id == user.id).delete(synchronize_session=False)
-            db.commit()
+            if existing:
+                found = existing[0]
+            else:
+                with store().transaction() as tx:
+                    found = documents.write(
+                        "tags",
+                        documents.record_id("tags"),
+                        {
+                            "owner_id": str(user.id),
+                            "name": name,
+                            "name_key": key,
+                            "color": "",
+                            "created_at": documents.now(),
+                        },
+                        owner_id=user.id,
+                        transaction_id=tx,
+                    )
+                    store().stage(tx, [events.operation(user.id, "created", "tag", name)])
+            tags[key] = found
+        return found
 
-        tags: dict[str, Tag] = {}
-
-        def tag(name: str) -> Tag:
-            """Tag é do usuário: o mesmo nome em outra conta é outra tag."""
-            if name not in tags:
-                tags[name] = (
-                    db.query(Tag)
-                    .filter(Tag.name == name, Tag.owner_id == user.id)
-                    .one_or_none()
-                    or Tag(name=name, owner_id=user.id)
+    first_note: dict[str, int] = {}
+    titles: dict[int, str] = {}
+    blocks: list[Row] = []
+    for spec in NOTEBOOKS:
+        # A tag é linha própria do dono e entra por `write`; resolvida antes, a transação do caderno
+        # fica só com a entidade principal e as junções dela.
+        notebook_tags = [tag(name) for name in spec["tags"]]
+        with store().transaction() as tx:
+            now = documents.now()
+            notebook = documents.write(
+                "notebooks",
+                documents.record_id("notebooks"),
+                {
+                    "title": spec["title"],
+                    "description": spec["description"],
+                    "owner_id": str(user.id),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                owner_id=user.id,
+                transaction_id=tx,
+            )
+            store().stage(
+                tx,
+                [
+                    # O dono vem de notebook_members, não do caderno: sem esta linha ele nasce sem
+                    # ninguém. Os ids compostos são o rowId de cada junção, e toda coluna de id é
+                    # `string` no Appwrite — o int do contador vira texto aqui.
+                    documents.operation(
+                        "notebook_members",
+                        f"{user.id}_{notebook.id}",
+                        {
+                            "user_id": str(user.id),
+                            "notebook_id": str(notebook.id),
+                            "role": "owner",
+                            "created_at": now,
+                        },
+                    ),
+                    *[
+                        documents.operation(
+                            "notebook_tags",
+                            f"{notebook.id}_{row.id}",
+                            {
+                                "notebook_id": str(notebook.id),
+                                "tag_id": str(row.id),
+                                "created_at": now,
+                            },
+                        )
+                        for row in notebook_tags
+                    ],
+                    events.operation(user.id, "created", "notebook", spec["title"]),
+                ],
+            )
+        for note_position, note_spec in enumerate(spec["notes"]):
+            note_tags = [tag(name) for name in note_spec["tags"]]
+            with store().transaction() as tx:
+                now = documents.now()
+                note = documents.write(
+                    "notes",
+                    documents.record_id("notes"),
+                    {
+                        "notebook_id": str(notebook.id),
+                        "title": note_spec["title"],
+                        "position": note_position,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                    owner_id=user.id,
+                    transaction_id=tx,
                 )
-                db.add(tags[name])
-                db.flush()
-            return tags[name]
-
-        created: dict[str, Notebook] = {}
-        for spec in NOTEBOOKS:
-            notebook = Notebook(title=spec["title"], description=spec["description"])
-            db.add(notebook)
-            db.flush()
-            # O dono vem de notebook_members, não do caderno: sem esta linha ele nasce sem ninguém.
-            acl.add_member(db, notebook.id, user.id)
-            notebook.tags = [tag(name) for name in spec["tags"]]
-            for note_position, note_spec in enumerate(spec["notes"]):
-                note = Note(title=note_spec["title"], position=note_position)
-                note.tags = [tag(name) for name in note_spec["tags"]]
                 for block_position, (block_type, payload) in enumerate(note_spec["blocks"]):
-                    note.blocks.append(Block(position=block_position, type=block_type, **payload))
-                notebook.notes.append(note)
-            created[spec["title"]] = notebook
-        db.flush()
+                    blocks.append(
+                        documents.write(
+                            "blocks",
+                            documents.record_id("blocks"),
+                            {
+                                "note_id": str(note.id),
+                                "position": block_position,
+                                "type": block_type,
+                                **payload,
+                                "created_at": now,
+                                "updated_at": now,
+                            },
+                            owner_id=user.id,
+                            transaction_id=tx,
+                        )
+                    )
+                store().stage(
+                    tx,
+                    [
+                        *[
+                            documents.operation(
+                                "note_tags",
+                                f"{note.id}_{row.id}",
+                                {
+                                    "note_id": str(note.id),
+                                    "tag_id": str(row.id),
+                                    "created_at": now,
+                                },
+                            )
+                            for row in note_tags
+                        ],
+                        # A nota, os blocos dela e a auditoria são um commit só.
+                        events.operation(user.id, "created", "note", note_spec["title"]),
+                    ],
+                )
+            titles[note.id] = note_spec["title"]
+            first_note.setdefault(spec["title"], note.id)
 
-        # A relação agora é entre notas: cada vínculo de caderno virou um vínculo entre a primeira
-        # nota de cada lado (a tabela de vínculo entre cadernos não existe mais).
-        first_note = {title: notebook.notes[0].id for title, notebook in created.items()}
-        db.add_all(
+    # A relação agora é entre notas: cada vínculo de caderno virou um vínculo entre a primeira
+    # nota de cada lado (a tabela de vínculo entre cadernos não existe mais).
+    declared = [
+        (first_note["Oh My Posh"], first_note["Ideias soltas"], "mesmo produto"),
+        (first_note["Estudos de Rust"], first_note["Oh My Posh"], "inspira performance"),
+    ]
+    with store().transaction() as tx:
+        store().stage(
+            tx,
             [
-                NoteRelation(
-                    source_id=first_note["Oh My Posh"],
-                    target_id=first_note["Ideias soltas"],
-                    label="mesmo produto",
-                ),
-                NoteRelation(
-                    source_id=first_note["Estudos de Rust"],
-                    target_id=first_note["Oh My Posh"],
-                    label="inspira performance",
-                ),
-            ]
+                *[
+                    documents.operation(
+                        "note_relations",
+                        f"{source_id}_{target_id}",
+                        {
+                            "source_id": str(source_id),
+                            "target_id": str(target_id),
+                            "label": label,
+                            "created_at": documents.now(),
+                        },
+                    )
+                    for source_id, target_id, label in declared
+                ],
+                *[
+                    events.operation(
+                        user.id,
+                        "linked",
+                        "relation",
+                        f"{titles[source_id]} → {titles[target_id]}",
+                    )
+                    for source_id, target_id, _ in declared
+                ],
+            ],
         )
-        db.commit()
+
+    # Menção `[[Título]]` só se resolve quando o texto já existe — inclusive o das notas criadas
+    # nesta mesma rodada. Bloco novo não tem vínculo antigo para derrubar, então só vale reindexar
+    # o que traz `[[…]]` no texto.
+    citing = [block for block in blocks if links.parse_mentions(block.text)]
+    if citing:
+        with store().transaction() as tx:
+            for block in citing:
+                links.reindex_block(store(), block, user.id, tx)
 
     print(f"seed ok: {len(NOTEBOOKS)} cadernos para {user.email}")
 

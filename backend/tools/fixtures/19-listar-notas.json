@@ -1,0 +1,49 @@
+{
+  "body": [
+    {
+      "counts": {
+        "code": 0,
+        "image": 0,
+        "text": 1,
+        "url": 0,
+        "video": 0
+      },
+      "created_at": "<timestamp>",
+      "excerpt": "nota alvo do vínculo",
+      "id": "<id:nota>",
+      "notebook_id": "<id:caderno>",
+      "notebook_title": "parity-check",
+      "position": 2,
+      "tags": [],
+      "title": "parity-alvo",
+      "updated_at": "<timestamp>"
+    },
+    {
+      "counts": {
+        "code": 1,
+        "image": 0,
+        "text": 1,
+        "url": 0,
+        "video": 0
+      },
+      "created_at": "<timestamp>",
+      "excerpt": "print(2)",
+      "id": "<id:nota>",
+      "notebook_id": "<id:caderno>",
+      "notebook_title": "parity-check",
+      "position": 1,
+      "tags": [
+        {
+          "color": "#1f6feb",
+          "id": "<id:tag>",
+          "name": "<tag:nome>"
+        }
+      ],
+      "title": "parity-nota",
+      "updated_at": "<timestamp>"
+    }
+  ],
+  "kind": "json",
+  "status": 200,
+  "step": "listar_notas"
+}

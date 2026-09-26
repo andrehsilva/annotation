@@ -1,0 +1,11 @@
+{
+  "body": {
+    "kind": "image",
+    "name": "parity.png",
+    "size": 66,
+    "url": "/media/<id:midia>"
+  },
+  "kind": "json",
+  "status": 201,
+  "step": "subir_midia"
+}

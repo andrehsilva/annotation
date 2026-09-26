@@ -1,0 +1,19 @@
+{
+  "body": {
+    "blocks": 7,
+    "counts": {
+      "code": 1,
+      "image": 0,
+      "text": 5,
+      "url": 1,
+      "video": 0
+    },
+    "notebooks": 2,
+    "notes": 4,
+    "relations": 1,
+    "tags": 1
+  },
+  "kind": "json",
+  "status": 200,
+  "step": "stats"
+}

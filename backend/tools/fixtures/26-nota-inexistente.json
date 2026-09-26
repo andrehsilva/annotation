@@ -1,0 +1,8 @@
+{
+  "body": {
+    "detail": "Nota não encontrada"
+  },
+  "kind": "json",
+  "status": 404,
+  "step": "nota_inexistente"
+}
