@@ -147,7 +147,16 @@ class Store:
         self.tables = TablesDB(self.client)
         self.storage = Storage(self.client)
         self._lock = threading.Lock()
-        self._snapshots: dict[int, tuple[float, dict[str, list[dict[str, Any]]]]] = {}
+        self._snapshots: dict[int, tuple[float, dict[str, list[dict[str, Any]]], set[str]]] = {}
+        # Tabelas tocadas por este thread desde a última `invalidate`: é o que diz *o que* da foto
+        # precisa ser relido, em vez de descartar as dez tabelas por causa de uma linha.
+        self._local = threading.local()
+
+    def _touched(self, table: str) -> None:
+        touched = getattr(self._local, "tables", None)
+        if touched is None:
+            touched = self._local.tables = set()
+        touched.add(table)
 
     # -------------------------------------------------- leitura
 
@@ -199,6 +208,7 @@ class Store:
         permissions: list[str] | None = None,
         transaction_id: str | None = None,
     ) -> dict[str, Any]:
+        self._touched(table)
         try:
             return self.tables.create_row(
                 DATABASE_ID,
@@ -221,6 +231,7 @@ class Store:
         permissions: list[str] | None = None,
         transaction_id: str | None = None,
     ) -> dict[str, Any]:
+        self._touched(table)
         return self.tables.update_row(
             DATABASE_ID,
             table,
@@ -231,6 +242,7 @@ class Store:
         )
 
     def delete(self, table: str, row_id: str | int) -> bool:
+        self._touched(table)
         try:
             self.tables.delete_row(DATABASE_ID, table, str(row_id))
             return True
@@ -241,6 +253,7 @@ class Store:
 
     def delete_where(self, table: str, queries: list[str], batch: int = PAGE) -> int:
         """Apaga tudo que casa com as queries, em páginas (a rota de bulk é instável aqui)."""
+        self._touched(table)
         removed = 0
         while True:
             rows = self.list_rows(table, list(queries) + [limit(batch)]).rows
@@ -297,6 +310,10 @@ class Store:
         """
         if not operations:
             return
+        for operation in operations:
+            table = operation.get("tableId")
+            if isinstance(table, str) and table:
+                self._touched(table)
         cleaned = [
             {**operation, "data": _clean(operation.get("data") or {})}
             for operation in operations
@@ -306,46 +323,140 @@ class Store:
     # -------------------------------------------------- ids
 
     def next_id(self, kind: str) -> int:
-        """Contador por família de entidade, na tabela `counters` (incremento atômico)."""
-        if self.get("counters", kind) is None:
-            try:
-                self.create("counters", kind, {"value": 1})
-                return 1
-            except Conflict:
-                pass
-        row = self.tables.increment_row_column(DATABASE_ID, "counters", kind, "value", 1)
-        return int(row["value"])
+        """Contador por família de entidade, na tabela `counters` (incremento atômico).
+
+        O incremento é a primeira tentativa: a leitura de guarda custava uma ida a mais por id
+        sorteado — quatro por caderno criado, ~40 ms cada nesta instância. A linha só não existe na
+        primeira vez de cada família, e aí o `create` resolve (com `Conflict` se outro pediu antes).
+        """
+        try:
+            row = self.tables.increment_row_column(DATABASE_ID, "counters", kind, "value", 1)
+            return int(row["value"])
+        except AppwriteException as error:
+            if error.code != 404:
+                raise
+        try:
+            self.create("counters", kind, {"value": 1})
+            return 1
+        except Conflict:
+            row = self.tables.increment_row_column(DATABASE_ID, "counters", kind, "value", 1)
+            return int(row["value"])
 
     # -------------------------------------------------- cache por usuário
+
+    # As três ondas de dependência do `load_snapshot`, reaproveitadas para reler só o que sujou.
+    WAVES = (
+        ("notebook_members", "notebooks", "tags", "media_files"),
+        ("notes", "notebook_tags"),
+        ("blocks", "note_tags", "block_links", "note_relations"),
+    )
 
     def snapshot(self, user_id: int | str, fresh: bool = False) -> dict[str, list[dict[str, Any]]]:
         """Todos os dados de um usuário, paginados de uma vez e guardados por alguns segundos.
 
         As queries do Appwrite não têm `GROUP BY`/`JOIN`: as agregações do app contam em memória
-        sobre esta foto, e o cache evita uma varredura por requisição.
+        sobre esta foto, e o cache evita uma varredura por requisição. Depois de uma escrita entra
+        só o que a escrita tocou (`_reload`) — reler as dez tabelas custava ~0,5 s por escrita.
         """
         key = int(user_id)
         now = time.monotonic()
         with self._lock:
             cached = self._snapshots.get(key)
-            if cached and not fresh and now - cached[0] < SNAPSHOT_TTL:
+            if not fresh and cached is not None and not cached[2] and now - cached[0] < SNAPSHOT_TTL:
                 return cached[1]
-        photo = self.load_snapshot(key)
+        if not fresh and cached is not None and cached[2]:
+            photo = self._reload(key, cached[1], cached[2])
+        else:
+            photo = {table: self._normalize(table, rows) for table, rows in self.load_snapshot(key).items()}
+        with self._lock:
+            self._snapshots[key] = (time.monotonic(), photo, set())
+        return photo
+
+    @staticmethod
+    def _normalize(table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Import tardio de propósito: `documents` importa este módulo, então a normalização
         # (linha crua -> `Row` com id int e datetime) acontece aqui, não no topo.
         from . import documents
 
-        normalized = {
-            table: [documents.normalize(table, row) for row in rows]
-            for table, rows in photo.items()
-        }
-        with self._lock:
-            self._snapshots[key] = (now, normalized)
-        return normalized
+        return [documents.normalize(table, row) for row in rows]
 
     def invalidate(self, user_id: int | str) -> None:
+        """Marca para releitura as tabelas que este thread tocou.
+
+        Sem toque registrado (uma escrita fora das rotas conhecidas) a foto inteira é relida, que é
+        o comportamento antigo — o registro só estreita o que precisa voltar ao banco.
+        """
+        touched = getattr(self._local, "tables", None)
+        self._local.tables = set()
         with self._lock:
-            self._snapshots.pop(int(user_id), None)
+            cached = self._snapshots.get(int(user_id))
+            if cached is None:
+                return
+            loaded_at, photo, dirty = cached
+            self._snapshots[int(user_id)] = (loaded_at, photo, dirty | (touched or set(photo)))
+
+    def _reload(
+        self, user_id: int, photo: dict[str, list[dict[str, Any]]], dirty: set[str]
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Relê só as tabelas sujas, na mesma ordem de dependência da carga completa.
+
+        Tabelas que não fazem parte da foto (contadores, eventos, espelho do Drive) não têm o que
+        reler. Quando a lista de ids de caderno — ou de nota — muda, o que sai dela também volta:
+        sem isso uma nota nova não apareceria, porque o `page_in` das ondas seguintes sai da foto.
+        """
+        if not set(photo) <= {name for wave in self.WAVES for name in wave}:
+            return {table: self._normalize(table, rows) for table, rows in self.load_snapshot(user_id).items()}
+        who = str(user_id)
+        fresh = dict(photo)
+        todo = set(dirty)
+
+        def notebook_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
+            return sorted(
+                {row["notebook_id"] for row in source["notebook_members"]}
+                | {row["$id"] for row in source["notebooks"]}
+            )
+
+        def note_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
+            return sorted(row["$id"] for row in source["notes"])
+
+        def load(name: str) -> list[dict[str, Any]]:
+            # Os ids saem da foto já atualizada pelas ondas anteriores: uma nota nova só aparece no
+            # `page_in` da onda 3 se a lista dela vier das notas que acabaram de voltar do banco.
+            nb_ids, nt_ids = notebook_ids(fresh), note_ids(fresh)
+            if name == "notebook_members":
+                return list(self.page("notebook_members", [equal("user_id", who)]))
+            if name == "notebooks":
+                return list(self.page("notebooks", [equal("owner_id", who)]))
+            if name == "tags":
+                return list(self.page("tags", [equal("owner_id", who)]))
+            if name == "media_files":
+                return list(self.page("media_files", [equal("owner_id", who)]))
+            if name == "notes":
+                return list(self.page_in("notes", "notebook_id", nb_ids))
+            if name == "notebook_tags":
+                return list(self.page_in("notebook_tags", "notebook_id", nb_ids))
+            if name == "blocks":
+                return list(self.page_in("blocks", "note_id", nt_ids))
+            if name == "note_tags":
+                return list(self.page_in("note_tags", "note_id", nt_ids))
+            if name == "block_links":
+                return list(self.page_in("block_links", "note_id", nt_ids))
+            return self._relations_for_snapshot(nt_ids)
+
+        before_notebooks, before_notes = notebook_ids(photo), note_ids(photo)
+        for index, wave in enumerate(self.WAVES):
+            pending = [name for name in wave if name in todo]
+            if pending:
+                with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as pool:
+                    futures = {name: pool.submit(load, name) for name in pending}
+                    for name, future in futures.items():
+                        fresh[name] = self._normalize(name, future.result())
+            # Ids que mudaram puxam as ondas seguintes: o que sai deles ficou velho junto.
+            if index == 0 and notebook_ids(fresh) != before_notebooks:
+                todo |= set(self.WAVES[1]) | set(self.WAVES[2])
+            if index == 1 and note_ids(fresh) != before_notes:
+                todo |= set(self.WAVES[2])
+        return fresh
 
     def load_snapshot(self, user_id: int) -> dict[str, list[dict[str, Any]]]:
         """Carrega as tabelas do usuário em três ondas paralelas (caderno → nota → bloco).
