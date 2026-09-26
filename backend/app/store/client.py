@@ -38,9 +38,6 @@ PAGE = 100
 SNAPSHOT_TTL = float(os.environ.get("NOTAI_SNAPSHOT_TTL", "30"))
 # `equal` aceita vários valores (é um IN), mas o teto medido é 100 por consulta.
 IN_VALUES = 100
-# DIAGNÓSTICO: o que cada releitura parcial leu e quanto voltou (sai depois da medição).
-DIAG_RELOAD: list[str] = []
-
 # Quantas requisições simultâneas ao Appwrite. A foto é uma dúzia de consultas curtas e o BFF passa
 # a maior parte do tempo esperando a rede: em série davam ~4,5 s por lista de cadernos (medido).
 SNAPSHOT_WORKERS = int(os.environ.get("NOTAI_SNAPSHOT_WORKERS", "8"))
@@ -439,15 +436,7 @@ class Store:
             if not fresh and cached is not None and not cached[2] and now - cached[0] < SNAPSHOT_TTL:
                 return cached[1]
         if not fresh and cached is not None and cached[2]:
-            before = {name: len(rows) for name, rows in cached[1].items()}
             photo = self._reload(key, cached[1], cached[2])
-            DIAG_RELOAD.append(
-                "dirty=" + ",".join(sorted(cached[2]))
-                + " " + " ".join(
-                    f"{name}:{before[name]}->{len(photo[name])}"
-                    for name in sorted(cached[2] & set(photo)) 
-                )
-            )
         else:
             photo = {table: self._normalize(table, rows) for table, rows in self.load_snapshot(key).items()}
         with self._lock:
