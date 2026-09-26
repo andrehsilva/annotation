@@ -87,6 +87,10 @@ Convenções que valem a pena saber antes de mexer:
   violado aparece no commit e vira `Conflict`.
 - **Agregação é nossa**: o Appwrite não tem `GROUP BY`/`JOIN`, então contagens, afinidade e busca
   filtram em Python sobre uma foto curta por usuário (`store().snapshot`).
+- **A foto é cache de escrita**: a linha gravada entra nela na hora (vem da própria escrita) e o que
+  é apagado sai dela — o BFF não relê o Appwrite depois de escrever, porque nesta instância a
+  consulta logo depois do commit ainda devolve o estado anterior (medido). Ler o Appwrite a cada
+  requisição custava uma dúzia de idas de ~40 ms; hoje a leitura quente são as duas do login.
 - **Upload**: o bucket está limitado a **30 MB** pelo `_APP_STORAGE_LIMIT` do servidor; para os 256 MB
   do app é preciso subir essa variável no `.env` do Appwrite e recriar o stack.
 - **Backup** passa a ser do Appwrite: `mysqldump` do banco + volumes `appwrite-uploads` e o `.env`
