@@ -411,13 +411,15 @@ class Store:
         todo = set(dirty)
 
         def notebook_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
+            # A foto já é normalizada: `row_id` é o id cru do Appwrite e os campos de id de relação
+            # viram int no modelo antigo — o `page_in` da onda seguinte quer todos como string.
             return sorted(
-                {row["notebook_id"] for row in source["notebook_members"]}
-                | {row["$id"] for row in source["notebooks"]}
+                {str(row["notebook_id"]) for row in source["notebook_members"]}
+                | {str(row["row_id"]) for row in source["notebooks"]}
             )
 
         def note_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
-            return sorted(row["$id"] for row in source["notes"])
+            return sorted(str(row["row_id"]) for row in source["notes"])
 
         def load(name: str) -> list[dict[str, Any]]:
             # Os ids saem da foto já atualizada pelas ondas anteriores: uma nota nova só aparece no
