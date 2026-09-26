@@ -2,6 +2,17 @@
 
 Today every notebook has exactly one member (`owner`), written when the notebook is created. Sharing
 means inserting another row here; no router changes.
+
+Matriz de papéis por operação (o `minimum` que cada rota passa para `deps.notebook_for`):
+
+| operação                                        | mínimo |
+| ----------------------------------------------- | ------ |
+| ler caderno, notas, blocos, tags, busca, grafo    | viewer |
+| criar/editar/apagar nota, bloco, vínculo e tag    | editor |
+| renomear ou apagar o **caderno** (e membros)      | owner  |
+
+O papel `owner` existe no modelo e a migração do SQLite o copia literalmente: um `editor` de uma
+instalação migrada não pode apagar o caderno dos outros, que é o que a matriz acima garante.
 """
 
 from __future__ import annotations

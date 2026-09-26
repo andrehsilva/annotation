@@ -1,4 +1,4 @@
-import { Note, NoteBlank, Plus, SidebarSimple, Tag as TagIcon } from "@phosphor-icons/react";
+import { GraphIcon, NoteBlank, Plus, SidebarSimple, Tag as TagIcon } from "@phosphor-icons/react";
 
 import type { View } from "../App";
 import { KIND_ICONS } from "../lib/kinds";
@@ -105,13 +105,15 @@ export function Sidebar({
                   </span>
                 );
               })}
-              <span
-                className="count-chip is-zero"
-                title={`${notebook.relations_count} caderno(s) ligado(s) pelas notas`}
-              >
-                <Note size={12} weight="bold" />
-                {notebook.relations_count}
-              </span>
+              {notebook.relations_count > 0 && (
+                <span
+                  className="count-chip"
+                  title={`${notebook.relations_count} caderno(s) ligado(s) pelas notas`}
+                >
+                  <GraphIcon size={12} weight="bold" />
+                  {notebook.relations_count}
+                </span>
+              )}
             </span>
             {notebook.tags.length > 0 && (
               <span className="nb-item-tags">

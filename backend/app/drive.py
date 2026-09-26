@@ -12,7 +12,7 @@ from pathlib import Path
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
 from googleapiclient.discovery import Resource, build
 
 from .config import DATA_DIR
@@ -95,15 +95,30 @@ def save_client_file(user_id: int, raw: bytes) -> None:
     client_file(user_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+# Sem teto, `run_local_server` espera para sempre: cada chamada presa segura um worker do threadpool
+# do uvicorn (40 no total) e a API inteira para de responder. Medido na biblioteca instalada.
+CONNECT_TIMEOUT = 180
+
+
+class ConnectTimeout(Exception):
+    """A autorização não voltou dentro do prazo."""
+
+
 def connect(user_id: int) -> None:
     """Open the browser and block until the loopback redirect carries the authorization code."""
     flow = InstalledAppFlow.from_client_secrets_file(str(client_file(user_id)), SCOPES)
-    creds = flow.run_local_server(
-        host="127.0.0.1",
-        port=0,
-        open_browser=True,
-        success_message="Pode fechar esta aba e voltar ao AnotAI.",
-    )
+    try:
+        creds = flow.run_local_server(
+            host="127.0.0.1",
+            port=0,
+            open_browser=True,
+            success_message="Pode fechar esta aba e voltar ao AnotAI.",
+            timeout_seconds=CONNECT_TIMEOUT,
+        )
+    except WSGITimeoutError as error:
+        raise ConnectTimeout(
+            f"A autorização não chegou em {CONNECT_TIMEOUT}s. Tente de novo."
+        ) from error
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     token_file(user_id).write_text(creds.to_json(), encoding="utf-8")
 

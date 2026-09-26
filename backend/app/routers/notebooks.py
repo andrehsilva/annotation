@@ -120,7 +120,7 @@ def update_notebook(
     user: documents.Row = Depends(deps.current_user),
     db: Store = Depends(deps.get_db),
 ) -> NotebookOut:
-    notebook = deps.notebook_for(db, user, notebook_id)
+    notebook = deps.notebook_for(db, user, notebook_id, "owner")
     data: dict = {}
     if payload.title is not None:
         data["title"] = payload.title.strip()
@@ -143,7 +143,7 @@ def delete_notebook(
     user: documents.Row = Depends(deps.current_user),
     db: Store = Depends(deps.get_db),
 ) -> Response:
-    notebook = deps.notebook_for(db, user, notebook_id)
+    notebook = deps.notebook_for(db, user, notebook_id, "owner")
     title = notebook.title  # o caderno some no delete, então o rótulo sai antes
     photo = db.snapshot(user.id)
     note_ids = {note.id for note in photo["notes"] if note.notebook_id == notebook_id}

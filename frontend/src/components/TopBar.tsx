@@ -58,7 +58,8 @@ export function TopBar({
 
   sidebarOpen,
 }: TopBarProps) {
-  const isNotebookSection = view.kind === "notebook" || view.kind === "note";
+  const isNotebookSection =
+    view.kind === "notebooks" || view.kind === "notebook" || view.kind === "note";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -195,8 +196,7 @@ export function TopBar({
             title="Novo caderno"
           >
             <Plus size={13} weight="bold" />
-            <Notebook size={15} weight="bold" />
-            <span className="create-label">Caderno</span>
+            <Notebook size={16} weight="bold" />
           </button>
           <button
             type="button"
@@ -205,8 +205,7 @@ export function TopBar({
             title="Nova nota"
           >
             <Plus size={13} weight="bold" />
-            <NoteBlank size={15} weight="bold" />
-            <span className="create-label">Nota</span>
+            <NoteBlank size={16} weight="bold" />
           </button>
         </div>
         <span className="topbar-divider" aria-hidden="true" />

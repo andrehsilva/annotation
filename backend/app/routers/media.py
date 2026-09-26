@@ -132,6 +132,9 @@ def get_media(
     media = documents.media_by_filename(filename)
     if media is None or media.owner_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado")
+    # Nome seguro para o cabeçalho: sem quebra de linha nem aspas, que reinventariam o header.
+    raw_name = media.original_name or filename
+    safe_name = "".join(ch for ch in raw_name if ch.isascii() and ch not in '"\\\r\n') or filename
     return Response(
         content=db.storage.get_file_view(BUCKET_ID, media.row_id),
         media_type=media.content_type or None,
@@ -139,5 +142,15 @@ def get_media(
         # (Cloudflare, que cacheia .png/.mp4 por padrão) guardaria a resposta do dono e a serviria
         # a quem não tem sessão — medido na instância de produção, com o arquivo respondendo 200
         # sem cookie depois de um único acesso autenticado.
-        headers={"Cache-Control": "private, no-store"},
+        #
+        # `attachment` + `nosniff` + CSP sem origem: um SVG enviado aqui executa script se for aberto
+        # como página, e essa página seria a origem do app (o cookie é HttpOnly, mas o script fala
+        # com a API). `<img>`/`<video>` ignoram o Content-Disposition, então a nota segue mostrando
+        # a mídia normalmente.
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
     )

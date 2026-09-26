@@ -21,16 +21,32 @@ COOKIE_SECURE = os.environ.get("CADERNO_COOKIE_SECURE", "").strip().lower() in (
 
 
 class Attempts:
-    """In-memory slowdown after repeated failures: one process, one small app, no storage."""
+    """In-memory slowdown after repeated failures: one process, one small app, no storage.
+
+    A chave é o e-mail, mas a memória tem teto: sem poda, um anônimo que varia o e-mail a cada
+    tentativa cria uma entrada por requisição até derrubar o processo. `KEYS_MAX` mantém o
+    dicionário limitado e a poda por janela roda a cada `check`.
+    """
 
     WINDOW = 15 * 60
     LIMIT = 5
+    KEYS_MAX = 5000
 
     def __init__(self) -> None:
         self._hits: dict[str, list[float]] = {}
 
+    def _prune(self, now: float) -> None:
+        if len(self._hits) <= self.KEYS_MAX:
+            return
+        for key in [k for k, hits in self._hits.items() if not hits or now - hits[-1] > self.WINDOW]:
+            self._hits.pop(key, None)
+        # Ainda grande (tudo dentro da janela): descarta os mais antigos até caber no teto.
+        while len(self._hits) > self.KEYS_MAX:
+            self._hits.pop(next(iter(self._hits)), None)
+
     def check(self, key: str) -> None:
         now = time.monotonic()
+        self._prune(now)
         recent = [hit for hit in self._hits.get(key, []) if now - hit < self.WINDOW]
         self._hits[key] = recent
         if len(recent) >= self.LIMIT:
@@ -118,7 +134,9 @@ def change_password(
         "users", user.id, {"password_hash": security.hash_password(payload.new_password)}, owner_id=None
     )
     # A sessão atual fica: o rowId das outras é o hash de cada token, então o filtro é aqui.
-    keep = security.hash_token(request.cookies.get(COOKIE_NAME, ""))
+    # `session_id` trunca o sha256 em 32 chars (o rowId do Appwrite aceita 36): comparar com o hash
+    # inteiro nunca casava e a troca de senha derrubava também a sessão de quem trocou.
+    keep = documents.session_id(security.hash_token(request.cookies.get(COOKIE_NAME, "")))
     for session in documents.all_rows("sessions", [equal("user_id", str(user.id))]):
         if session.row_id != keep:
             db.delete("sessions", session.row_id)

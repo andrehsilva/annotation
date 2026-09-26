@@ -2189,16 +2189,13 @@ iframe.element-media {
   }
 }
 
-/* Telas estreitas: os rótulos dos botões de criação e do chip do usuário somem e ficam os ícones
-   (o nome continua no title/aria-label). */
+/* Telas estreitas: o nome no chip do usuário some e ficam os ícones (title/aria-label continuam). */
 @media (max-width: 1420px) {
-  .create-label,
   .user-chip-name {
     display: none;
   }
 
   .topbar-create {
-    gap: var(--space-2);
     margin-right: var(--space-4);
   }
 }

@@ -10,6 +10,7 @@ import { ImageModal } from "./components/ImageModal";
 import type { ImagePreview } from "./components/ImageModal";
 import { LoginView } from "./components/LoginView";
 import { NoteEditor } from "./components/NoteEditor";
+import { NotebooksView } from "./components/NotebooksView";
 import { NotesView } from "./components/NotesView";
 import { NotebookView } from "./components/NotebookView";
 import { PasswordPanel } from "./components/PasswordPanel";
@@ -38,6 +39,7 @@ import type {
 } from "./lib/types";
 
 export type View =
+  | { kind: "notebooks" }
   | { kind: "notebook"; id: number }
   | { kind: "note"; notebookId: number; id: number }
   | { kind: "kind"; blockType: BlockType }
@@ -113,6 +115,11 @@ export default function App() {
     setFeed(null);
     setBellOpen(false);
     bellAutoOpened.current = false;
+    // Numa máquina compartilhada nada do usuário anterior pode sobrar por cima da tela de entrada.
+    setToasts([]);
+    setImage(null);
+    setSearchOpen(false);
+    setDriveOpen(false);
     setReady(false);
   }, []);
 
@@ -573,6 +580,15 @@ export default function App() {
         />
       );
     }
+    if (view.kind === "notebooks") {
+      return (
+        <NotebooksView
+          notebooks={notebooks}
+          onOpenNotebook={(id) => void openNotebook(id)}
+          onCreateNotebook={() => void createNotebook()}
+        />
+      );
+    }
     if (view.kind === "kind") {
       return (
         <KindView
@@ -622,10 +638,7 @@ export default function App() {
         driveConnected={driveStatus?.connected ?? false}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onNavigate={setView}
-        onHome={() => {
-          const first = notebooks[0];
-          if (first) void openNotebook(first.id);
-        }}
+        onHome={() => setView({ kind: "notebooks" })}
         onOpenSearch={() => setSearchOpen(true)}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onOpenDrive={openDrive}

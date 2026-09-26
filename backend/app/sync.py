@@ -488,7 +488,7 @@ def _media(
         if cached and cached.get("link"):
             links[url] = cached["link"]
             continue
-        row = _media_row(photo, name)
+        row = _media_row(photo, name, user_id)
         if row is None or row.size > MAX_MEDIA_BYTES:
             skipped += 1
             continue
@@ -510,12 +510,22 @@ def _media(
     return links, sent, skipped, errors
 
 
-def _media_row(photo: Photo, filename: str) -> Row | None:
-    """A linha do arquivo: a foto traz as do dono, o resto (nota compartilhada) vem por id."""
+def _media_row(photo: Photo, filename: str, user_id: int) -> Row | None:
+    """A linha do arquivo: a foto traz as do dono, o resto (nota compartilhada) vem por id.
+
+    O `documents.media_by_filename` é uma consulta global por rowId, e a leitura dos bytes usa a API
+    key (que ignora a permissão do arquivo): sem a checagem de dono aqui, um bloco com
+    `/media/<nome>` de outra conta mandava o arquivo dela para o Drive de quem exportou — o mesmo
+    `404` que `routers/media.get_media` aplica. Medido pelo auditor: `sync._media_row` não olhava
+    `owner_id`.
+    """
     for row in photo["media_files"]:
         if row.filename == filename:
             return row
-    return documents.media_by_filename(filename)
+    found = documents.media_by_filename(filename)
+    if found is None or found.owner_id != user_id:
+        return None
+    return found
 
 
 def _media_bytes(db: Store, filename: str) -> bytes | None:

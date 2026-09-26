@@ -6,6 +6,7 @@ o processo é um BFF fino — contrato HTTP intacto, regra de negócio e agrega�
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -27,7 +28,15 @@ from .routers import (
     tags,
 )
 
-ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# Origens de desenvolvimento só entram se pedidas no ambiente: em produção o SPA é same-origin
+# (o nginx serve a página e faz proxy de `/api`), então a lista vazia é a configuração certa — e ela
+# também é a exceção do guard de escrita, então manter localhost aqui abriria a porta para qualquer
+# processo local que suba um servidor na 5173.
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CADERNO_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 @asynccontextmanager

@@ -62,21 +62,27 @@ class BlockOut(ORMModel):
     updated_at: UTCDateTime
 
 
+# Tetos do conteúdo. O texto do bloco é a única coluna grande do app e a foto do usuário (usada por
+# quase toda rota) fica inteira em memória por 30 s: sem teto, um usuário enche a RAM do processo
+# compartilhado. 100 mil caracteres é ~50x o maior bloco real.
+MAX_BLOCK_TEXT = 100_000
+
+
 class BlockIn(BaseModel):
     type: BlockType = "text"
-    text: str = ""
-    language: str = ""
-    url: str = ""
-    caption: str = ""
+    text: str = Field(default="", max_length=MAX_BLOCK_TEXT)
+    language: str = Field(default="", max_length=40)
+    url: str = Field(default="", max_length=2000)
+    caption: str = Field(default="", max_length=1000)
     position: int | None = None
 
 
 class BlockPatch(BaseModel):
     type: BlockType | None = None
-    text: str | None = None
-    language: str | None = None
-    url: str | None = None
-    caption: str | None = None
+    text: str | None = Field(default=None, max_length=MAX_BLOCK_TEXT)
+    language: str | None = Field(default=None, max_length=40)
+    url: str | None = Field(default=None, max_length=2000)
+    caption: str | None = Field(default=None, max_length=1000)
 
 
 class BlockReorder(BaseModel):
@@ -126,7 +132,7 @@ class NoteSummary(ORMModel):
 
 class NoteIn(BaseModel):
     title: str = Field(default="", max_length=200)
-    text: str = ""
+    text: str = Field(default="", max_length=MAX_BLOCK_TEXT)
 
 
 class NotePatch(BaseModel):
