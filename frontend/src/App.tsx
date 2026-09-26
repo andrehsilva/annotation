@@ -299,19 +299,32 @@ export default function App() {
     }
   }, [refreshWorkspace, report, view]);
 
+  /** Criação de caderno em voo: `+ Nota` espera ela para não escrever no caderno errado. */
+  const creatingNotebook = useRef<Promise<number | null> | null>(null);
+
   const createNotebook = useCallback(async () => {
+    const job = (async () => {
+      try {
+        const created = await api.createNotebook("Novo caderno");
+        await refreshWorkspace();
+        setNotebook(created);
+        setNote(null);
+        setView({ kind: "notebook", id: created.id });
+        notify("Caderno criado. Renomeie no título.", "success");
+        window.setTimeout(() => {
+          document.querySelector<HTMLInputElement>(".nb-title-input")?.select();
+        }, 30);
+        return created.id;
+      } catch (error) {
+        report(error);
+        return null;
+      }
+    })();
+    creatingNotebook.current = job;
     try {
-      const created = await api.createNotebook("Novo caderno");
-      await refreshWorkspace();
-      setNotebook(created);
-      setNote(null);
-      setView({ kind: "notebook", id: created.id });
-      notify("Caderno criado. Renomeie no título.", "success");
-      window.setTimeout(() => {
-        document.querySelector<HTMLInputElement>(".nb-title-input")?.select();
-      }, 30);
-    } catch (error) {
-      report(error);
+      return await job;
+    } finally {
+      if (creatingNotebook.current === job) creatingNotebook.current = null;
     }
   }, [notify, refreshWorkspace, report]);
 
@@ -367,13 +380,15 @@ export default function App() {
   );
 
   /** Criar nota de qualquer lugar: usa o caderno aberto, senão o primeiro; sem nenhum, cria o caderno. */
-  const createNoteAnywhere = useCallback(() => {
-    const target = notebook ?? notebooks[0];
-    if (!target) {
-      void createNotebook();
+  const createNoteAnywhere = useCallback(async () => {
+    // Um caderno recém-criado ainda não está no estado: espera o que estiver em voo antes de escolher.
+    const pending = creatingNotebook.current;
+    const targetId = pending ? await pending : (notebook ?? notebooks[0])?.id ?? null;
+    if (targetId === null) {
+      await createNotebook();
       return;
     }
-    void createNote(target.id, "");
+    await createNote(targetId, "");
   }, [createNote, createNotebook, notebook, notebooks]);
 
   const deleteNote = useCallback(
