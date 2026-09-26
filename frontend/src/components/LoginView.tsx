@@ -41,7 +41,7 @@ export function LoginView({ onLoggedIn }: LoginViewProps) {
           <span className="logo-mark" aria-hidden="true">
             {">_"}
           </span>
-          <span className="wordmark">NotAI</span>
+          <span className="wordmark">AnotAI</span>
         </div>
         <p className="panel-hint">Entre com a sua conta para abrir os seus cadernos.</p>
 

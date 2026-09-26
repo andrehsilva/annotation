@@ -102,7 +102,7 @@ def connect(user_id: int) -> None:
         host="127.0.0.1",
         port=0,
         open_browser=True,
-        success_message="Pode fechar esta aba e voltar ao NotAI.",
+        success_message="Pode fechar esta aba e voltar ao AnotAI.",
     )
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     token_file(user_id).write_text(creds.to_json(), encoding="utf-8")

@@ -335,7 +335,7 @@ def seed(reset: bool, email: str | None = None) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="seed.py", description="Dados de demonstração do NotAI")
+    parser = argparse.ArgumentParser(prog="seed.py", description="Dados de demonstração do AnotAI")
     parser.add_argument("--reset", action="store_true", help="apaga antes os dados do usuário alvo")
     parser.add_argument("--email", default=None, help="dono dos dados (padrão: o admin existente)")
     args = parser.parse_args(argv)

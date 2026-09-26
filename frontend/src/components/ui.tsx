@@ -24,7 +24,11 @@ export function EmptyState({
 
 export function Spinner({ label }: { label: string }) {
   return (
-    <div className="loading">
+    <div className="loading" role="status" aria-live="polite">
+      <span className="loading-mark" aria-hidden="true">
+        {">"}
+        <span className="loading-caret">_</span>
+      </span>
       <p>{label}</p>
     </div>
   );

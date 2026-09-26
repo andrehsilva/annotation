@@ -170,6 +170,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* A marca termina em texto e o primeiro item da navegação é um chip com borda: sem esta
+     folga extra os dois parecem colados. */
+  margin-right: var(--space-3);
 }
 
 .topbar-toggle {
@@ -1962,14 +1965,62 @@ iframe.element-media {
   font-size: 13px;
 }
 
+/* Estado de carregamento: centralizado na área do conteúdo, com a marca do app em vez de um
+   texto solto na margem — e só aparece se a espera passar de ~120 ms, então navegar não pisca. */
 .loading {
-  padding: 36px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: min(48vh, 360px);
+  padding: var(--space-6) var(--space-4);
   color: var(--text-muted);
   font-size: 13px;
+  text-align: center;
+  animation: loading-in 200ms ease 120ms both;
+}
+
+.loading-mark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--primary);
+}
+
+.loading-caret {
+  animation: caret-blink 1s steps(1, end) infinite;
 }
 
 .loading p {
   margin: 0;
+}
+
+@keyframes loading-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading {
+    animation: none;
+  }
+
+  .loading-caret {
+    animation: none;
+  }
 }
 
 .overlay.is-centered {

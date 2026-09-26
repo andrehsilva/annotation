@@ -19,7 +19,7 @@ import { TagsView } from "./components/TagsView";
 import { ToastStack } from "./components/ToastStack";
 import type { Toast, ToastKind } from "./components/ToastStack";
 import { TopBar } from "./components/TopBar";
-import { EmptyState } from "./components/ui";
+import { Spinner } from "./components/ui";
 import { ApiError, api } from "./lib/api";
 import { notebookMatches } from "./lib/format";
 import { useTheme } from "./lib/theme";
@@ -476,7 +476,7 @@ export default function App() {
       <div className="app">
         <main className="main">
           <div className="view">
-            <EmptyState title="Carregando" hint="Verificando a sessão" />
+            <Spinner label="Verificando a sessão" />
           </div>
         </main>
       </div>
@@ -486,7 +486,7 @@ export default function App() {
   if (!user) return <LoginView onLoggedIn={(loggedIn) => setUser(loggedIn)} />;
 
   const main = (() => {
-    if (!ready) return <EmptyState title="Carregando" hint="Falando com a API local em /api" />;
+    if (!ready) return <Spinner label="Falando com a API em /api" />;
     if (view.kind === "admin") {
       return (
         <AdminView

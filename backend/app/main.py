@@ -1,4 +1,4 @@
-"""FastAPI application for NotAI: users, notebooks, notes, blocks, tags, relations.
+"""FastAPI application for AnotAI: users, notebooks, notes, blocks, tags, relations.
 
 O app não guarda mais dado nenhum em SQLite: `app/store/` fala com o Appwrite (TablesDB + Storage) e
 o processo é um BFF fino — contrato HTTP intacto, regra de negócio e agregação aqui.
@@ -40,7 +40,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="NotAI API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="AnotAI API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

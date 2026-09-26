@@ -63,7 +63,7 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
     onAskConfirm({
       title: "Desconectar do Google Drive",
       message:
-        "O NotAI deixa de enviar as notas. Os arquivos já enviados continuam no seu Drive; ao reconectar, os vínculos são recriados.",
+        "O AnotAI deixa de enviar as notas. Os arquivos já enviados continuam no seu Drive; ao reconectar, os vínculos são recriados.",
       confirmLabel: "Desconectar",
       danger: true,
       action: async () => {
@@ -150,7 +150,8 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
         ) : status.has_client_file ? (
           <>
             <p className="panel-hint">
-              O NotAI cria a pasta <b>NotAI</b> no seu Drive, uma subpasta por caderno e um arquivo
+              O AnotAI cria a pasta <b>NotAI</b> no seu Drive (o nome da pasta não mudou), uma subpasta
+              por caderno e um arquivo
               .md por nota. Nada é lido nem apagado no Drive.
             </p>
             <div className="btn-row">
@@ -172,7 +173,7 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
         ) : (
           <>
             <p className="panel-hint">
-              O envio é de mão única: o NotAI escreve no seu Drive e nunca lê nem apaga nada lá.
+              O envio é de mão única: o AnotAI escreve no seu Drive e nunca lê nem apaga nada lá.
               Para começar, crie as credenciais no Google Cloud:
             </p>
             <ol className="drive-steps">
@@ -186,13 +187,13 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
                 >
                   Google Cloud Console
                 </a>{" "}
-                e crie um projeto (ex.: NotAI).
+                e crie um projeto (ex.: AnotAI).
               </li>
               <li>
                 Em “APIs e serviços” → Biblioteca, ative a <b>Google Drive API</b>.
               </li>
               <li>
-                Em “Tela de permissão OAuth”, escolha o tipo <b>Externo</b>, use <b>NotAI</b> como
+                Em “Tela de permissão OAuth”, escolha o tipo <b>Externo</b>, use <b>AnotAI</b> como
                 nome e adicione o seu e-mail em “Usuários de teste”.
               </li>
               <li>

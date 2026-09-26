@@ -42,7 +42,7 @@ def ask_password(explicit: str | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="manage.py", description="Usuários do NotAI")
+    parser = argparse.ArgumentParser(prog="manage.py", description="Usuários do AnotAI")
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("list-users", help="lista e-mails, papéis e estado")
