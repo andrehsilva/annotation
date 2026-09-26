@@ -629,7 +629,7 @@ export default function App() {
             onClose={() => setSidebarOpen(false)}
           />
         )}
-        <main className="main">{main}</main>
+        <main className="main" id="conteudo" tabIndex={-1}>{main}</main>
       </div>
       {searchOpen && (
         <CommandPalette onClose={() => setSearchOpen(false)} onNavigate={(hit) => void navigateHit(hit)} />

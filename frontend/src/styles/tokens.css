@@ -28,6 +28,15 @@
   --radius-lg: 12px;
   --radius-full: 999px;
 
+  /* Ritmo vertical/horizontal: tudo que é espaçamento sai daqui (ver DESIGN.md). */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 28px;
+  --space-7: 44px;
+
   --font-mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas,
     "SFMono-Regular", ui-monospace, monospace;
 
@@ -38,15 +47,17 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg: #ffffff;
-  --surface: #f6f7f9;
+  /* Papel em vez de branco puro: o canvas e o chrome são tingidos, e só o que é elevado
+     (cartões, blocos, campos) fica branco — é o contraste que separa as camadas. */
+  --bg: #f4f6fa;
+  --surface: #e9edf4;
   --surface-raised: #ffffff;
   --input-bg: #ffffff;
-  --code-bg: #f6f8fa;
-  --border: #e2e5ea;
-  --border-strong: #cfd4dc;
-  --text: #14161a;
-  --text-muted: #5c6470;
+  --code-bg: #eff3f9;
+  --border: #dbe0e9;
+  --border-strong: #c1c8d6;
+  --text: #131720;
+  --text-muted: #59616f;
   --primary: #1f6feb;
   --primary-strong: #1a5fd0;
   --on-primary: #ffffff;
@@ -55,6 +66,6 @@
   --danger: #b42318;
   --danger-strong: #b42318;
   --backdrop: rgb(20 22 26 / 45%);
-  --ring: rgb(31 111 235 / 18%);
-  --shadow: 0 18px 44px rgb(20 22 26 / 14%);
+  --ring: rgb(31 111 235 / 16%);
+  --shadow: 0 18px 40px rgb(23 30 46 / 12%);
 }

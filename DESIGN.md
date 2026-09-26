@@ -3,19 +3,19 @@ version: alpha
 name: NotAI
 description: Dark-first terminal notebook UI. Derived from the Oh My Posh documentation theme (near-black surfaces, monospace chrome, single cornflower-blue accent).
 colors:
-  background: "#ffffff"
+  background: "#f4f6fa"
   background-dark: "#1b1b1b"
-  surface: "#f6f7f9"
+  surface: "#e9edf4"
   surface-dark: "#202020"
   surface-raised: "#ffffff"
   surface-raised-dark: "#262626"
-  border: "#e2e5ea"
+  border: "#dbe0e9"
   border-dark: "#313131"
-  border-strong: "#cfd4dc"
+  border-strong: "#c1c8d6"
   border-strong-dark: "#434343"
-  on-surface: "#14161a"
+  on-surface: "#131720"
   on-surface-dark: "#e7e7e7"
-  on-surface-muted: "#5c6470"
+  on-surface-muted: "#59616f"
   on-surface-muted-dark: "#9c9c9c"
   primary: "#1f6feb"
   primary-dark: "#6ba5f8"
@@ -68,11 +68,13 @@ rounded:
   lg: 12px
   full: 999px
 spacing:
-  xs: 4px
-  sm: 8px
-  md: 12px
-  lg: 20px
-  xl: 32px
+  1: 4px
+  2: 8px
+  3: 12px
+  4: 16px
+  5: 20px
+  6: 28px
+  7: 44px
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
@@ -152,10 +154,13 @@ Dial values: `DESIGN_VARIANCE: 4` (predictable split-pane product UI), `MOTION_I
 notebook).
 
 ## Colors
-- **Background (#1b1b1b dark / #ffffff light):** app canvas.
-- **Surface (#202020 / #f6f7f9):** sidebar, top bar, inputs.
+- **Background (#1b1b1b dark / #f4f6fa light):** app canvas.
+- **Surface (#202020 / #e9edf4):** sidebar, top bar, inputs — the chrome band. In light the canvas
+  is paper and the chrome sits *below* it in value; in dark the chrome sits above. Either way the
+  point is the same: only what is elevated is pure white (`surface-raised`), so a card reads as a
+  card without needing a shadow.
 - **Surface raised (#262626 / #ffffff):** cards and blocks sitting on the canvas.
-- **Border (#313131 / #e2e5ea):** 1px hairlines; the only separation device used in cards.
+- **Border (#313131 / #dbe0e9):** 1px hairlines; the only separation device used in cards.
 - **Primary (#6ba5f8 dark / #1f6feb light):** links, active nav, active block kind, primary CTA.
   The single accent on the whole app; nothing else is colored except the two semantic states.
 - **Warn (#3b3b1d / #f0f0c8):** draft/unsaved state only. **Danger:** destructive hover only.
@@ -185,7 +190,15 @@ no square/pill mixing outside that rule.
   everything else. Icon-only buttons are 32px squares.
 - **Chips:** block-kind badges, tags, and counters. Outline chips for tags, filled chips for
   kind badges.
-- **Cards:** note previews and blocks. Hairline border, no shadow, hover raises the border color.
+- **Cards:** note previews, blocks and the per-kind lists. Hairline border, no shadow, hover
+  raises the border color; 14–18px of padding, and the footer of a card pins to the bottom
+  (`margin-top: auto`) so the action lines up across cards of different heights. Radii step down
+  with nesting: 12px on the container, 8px on what sits inside it.
+- **Spacing:** everything horizontal/vertical comes from the `--space-*` scale in
+  `styles/tokens.css` (4/8/12/16/20/28/44). Content column maxes at 1180px, 28px of padding, and
+  the bottom padding is larger than the top so the page does not look cut off.
+- **Motion:** 160ms on color/border of interactive surfaces, a 1px translate on press, and nothing
+  else — no entrance animations on the working UI.
 - **Inputs:** surface fill + border; focus replaces the border with the accent and adds a 2px
   accent halo.
 - **Keycaps:** `Ctrl`, `K`, `Alt+Space` hints rendered as small bordered keys, uppercase.
