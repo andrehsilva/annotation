@@ -135,4 +135,9 @@ def get_media(
     return Response(
         content=db.storage.get_file_view(BUCKET_ID, media.row_id),
         media_type=media.content_type or None,
+        # `private, no-store` porque a URL tem extensão de arquivo: cachê compartilhado à frente
+        # (Cloudflare, que cacheia .png/.mp4 por padrão) guardaria a resposta do dono e a serviria
+        # a quem não tem sessão — medido na instância de produção, com o arquivo respondendo 200
+        # sem cookie depois de um único acesso autenticado.
+        headers={"Cache-Control": "private, no-store"},
     )
