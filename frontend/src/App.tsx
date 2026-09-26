@@ -19,6 +19,7 @@ import { TagsView } from "./components/TagsView";
 import { ToastStack } from "./components/ToastStack";
 import type { Toast, ToastKind } from "./components/ToastStack";
 import { TopBar } from "./components/TopBar";
+import { QuickActions } from "./components/QuickActions";
 import { Spinner } from "./components/ui";
 import { ApiError, api } from "./lib/api";
 import { notebookMatches } from "./lib/format";
@@ -613,7 +614,7 @@ export default function App() {
   })();
 
   return (
-    <div className="app">
+    <div className={sidebarOpen ? "app has-sidebar" : "app"}>
       <TopBar
         view={view}
         stats={stats}
@@ -636,8 +637,6 @@ export default function App() {
         bellOpen={bellOpen}
         onBellOpenChange={changeBell}
         onAllRead={markEventsRead}
-        onNewNotebook={() => void createNotebook()}
-        onNewNote={createNoteAnywhere}
 
         sidebarOpen={sidebarOpen}
       />
@@ -656,7 +655,19 @@ export default function App() {
             onClose={() => setSidebarOpen(false)}
           />
         )}
-        <main className="main" id="conteudo" tabIndex={-1}>{main}</main>
+        <main className="main" id="conteudo" tabIndex={-1}>
+          {main}
+          <QuickActions
+            view={view}
+            onBack={() => {
+              const back = view.kind === "note" ? view.notebookId : null;
+              if (back !== null) void openNotebook(back);
+              else if (notebooks[0]) void openNotebook(notebooks[0].id);
+            }}
+            onNewNotebook={() => void createNotebook()}
+            onNewNote={createNoteAnywhere}
+          />
+        </main>
       </div>
       {searchOpen && (
         <CommandPalette onClose={() => setSearchOpen(false)} onNavigate={(hit) => void navigateHit(hit)} />

@@ -170,10 +170,11 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   somando todos os cadernos no caso dos tipos. Clicar num contador abre a lista achatada daquele tipo:
   sem agrupamento por caderno, o mais recente primeiro, e cada cartão mostra a origem
   (`caderno › nota`) e um botão **Abrir nota**.
-- Logo depois da navegação, **+ Caderno** e **+ Nota** criam sem sair de onde você está. A nota entra
-  no caderno aberto (ou no primeiro da lista; sem nenhum caderno, o botão cria o caderno, que já nasce
-  com uma nota). Os dois ficam na barra de propósito: com a lista de cadernos escondida não havia
-  outro caminho para criar.
+- No canto de baixo da coluna de conteúdo flutua o cluster de **ações rápidas**, que muda com a tela:
+  listando notas/tags/relações ele só oferece **+ caderno**; dentro de um caderno, também **+ nota**;
+  dentro de uma nota, ainda **voltar para os cadernos** (útil quando a página rolou e o cabeçalho saiu
+  de vista). A nota entra no caderno aberto — ou no primeiro da lista; sem nenhum caderno, o botão cria
+  o caderno, que já nasce com uma nota.
 - **Notas**, logo depois de Cadernos, abre a lista de todas as notas de todos os cadernos — da mais
   recente para a mais antiga, com o trecho, o caderno de origem, as contagens por tipo e há quanto
   tempo foi mexida. Um clique abre a nota (mesmo vindo de outro caderno).

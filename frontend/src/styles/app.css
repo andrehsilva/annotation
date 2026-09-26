@@ -175,6 +175,15 @@ textarea {
   margin-right: var(--space-3);
 }
 
+/* Com a lista de cadernos aberta, a marca ocupa o que sobra até o fim dela (16px de padding +
+   32px do botão + 2 gaps de 20px): a navegação começa exatamente na borda da sidebar, alinhada
+   com a coluna de conteúdo. */
+.topbar-brand.is-wide {
+  width: calc(var(--sidebar-w) - 88px);
+  margin-right: 0;
+  flex: none;
+}
+
 .topbar-toggle {
   display: inline-grid;
   place-items: center;
@@ -275,17 +284,60 @@ textarea {
   font-size: 11px;
 }
 
-/* Criar caderno/nota a partir do chrome: com a lista de cadernos escondida não havia caminho. */
-.topbar-create {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-left: var(--space-2);
+/* Ações rápidas: flutuam no canto da coluna de conteúdo, perto de onde se digita, e mudam com a
+   tela (caderno/nota). Ficam fora do cabeçalho do app de propósito. */
+.quick-actions {
+  position: sticky;
+  z-index: 15;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 36px var(--space-5);
+  /* O invólucro só posiciona: quem recebe clique é a pílula. */
+  pointer-events: none;
 }
 
-.topbar-create .create-chip:hover {
+.quick-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.quick-actions .icon-btn {
+  border-color: transparent;
+  background: none;
+}
+
+.quick-actions .icon-btn:hover {
+  border-color: transparent;
+  background: var(--surface);
+}
+
+.quick-actions .icon-btn.is-primary {
   color: var(--primary);
-  border-color: var(--primary);
+}
+
+.quick-actions .quick-plus {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+}
+
+.quick-actions .icon-btn {
+  position: relative;
+}
+
+/* A coluna de conteúdo começa depois da lista de cadernos: é o que posiciona o cluster. */
+.app.has-sidebar {
+  --content-left: var(--sidebar-w);
 }
 
 .topbar-actions {
@@ -2168,15 +2220,18 @@ iframe.element-media {
 }
 
 @media (max-width: 1320px) {
-  .create-label,
   .user-chip-name {
     display: none;
   }
 }
 
 @media (max-width: 1180px) {
+  :root {
+    --sidebar-w: 232px;
+  }
+
   .app-body {
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   }
 
   .app-body.is-sidebar-hidden {
