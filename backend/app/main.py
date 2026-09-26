@@ -175,7 +175,9 @@ async def diag_timing(request: Request, call_next):
                 if cache
                 else "sem-foto"
             )
+            reloads = " | ".join(_client.DIAG_RELOAD[-2:])
         except Exception as error:  # nunca deixa o diagnóstico derrubar a resposta
-            state = f"erro: {error}"
+            state, reloads = f"erro: {error}", "-"
     response.headers["X-BFF-CACHE"] = state
+    response.headers["X-BFF-RELOAD"] = reloads
     return response
