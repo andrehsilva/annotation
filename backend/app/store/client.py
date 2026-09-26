@@ -161,6 +161,57 @@ class Store:
             touched = self._local.tables = set()
         touched.add(table)
 
+    def _pending(self, owner_id: int | str) -> tuple[dict[str, dict[str, dict]], dict[str, set[str]]]:
+        """Linhas gravadas e apagadas deste dono, à espera do commit para entrar na foto."""
+        pending = getattr(self._local, "pending", None)
+        if pending is None:
+            pending = self._local.pending = {}
+        return pending.setdefault(int(owner_id), ({}, {}))
+
+    def _staged(self, table: str, operation: dict[str, Any]) -> None:
+        """Guarda a linha estagiada que faz parte da foto (vínculo, tag aplicada, menção).
+
+        Ela entra na foto do dono junto com a escrita direta: a transação só aparece no banco no
+        commit, e a consulta logo depois dele ainda devolve o estado anterior (medido).
+        """
+        if table not in self.PHOTO_TABLES:
+            return
+        data = dict(operation.get("data") or {})
+        raw = {"$id": str(operation.get("rowId") or data.get("$id") or ""), **data}
+        raw.setdefault("$createdAt", data.get("created_at"))
+        raw.setdefault("$updatedAt", data.get("created_at"))
+        staged = getattr(self._local, "staged", None)
+        if staged is None:
+            staged = self._local.staged = []
+        staged.append((table, raw))
+
+    def remember(self, owner_id: int | str, table: str, row: dict[str, Any]) -> None:
+        """Guarda a linha que acabou de ser gravada para entrar na foto do dono no commit.
+
+        Reler a tabela depois de escrever não serve nesta instância: a consulta devolve o estado
+        anterior ao commit (medido — `notes` voltou com a contagem antiga logo depois de a nota
+        entrar), então quem já tem a linha em mãos é a própria escrita.
+        """
+        self._touched(table)
+        writes, _ = self._pending(owner_id)
+        writes.setdefault(table, {})[str(row.get("row_id") or row["id"])] = row
+
+    def _forget_rows(self, table: str, row_ids: set[str]) -> None:
+        """Tira as linhas de todas as fotos em memória.
+
+        Apagar não espera releitura: a consulta ao Appwrite devolve o estado anterior à exclusão
+        logo depois dela (medido, como na escrita), e esperar o TTL deixaria a nota apagada visível
+        por até 30 s. Como a linha não existe mais para ninguém, sumir com ela de toda foto é certo.
+        """
+        with self._lock:
+            for key, entry in list(self._snapshots.items()):
+                rows = entry[1].get(table)
+                if not rows:
+                    continue
+                kept = [row for row in rows if str(row.get("row_id") or row["id"]) not in row_ids]
+                if len(kept) != len(rows):
+                    self._snapshots[key] = (entry[0], {**entry[1], table: kept}, entry[2])
+
     # -------------------------------------------------- leitura
 
     def list_rows(self, table: str, queries: list[str] | None = None) -> Reply:
@@ -248,6 +299,7 @@ class Store:
         self._touched(table)
         try:
             self.tables.delete_row(DATABASE_ID, table, str(row_id))
+            self._forget_rows(table, {str(row_id)})
             return True
         except AppwriteException as error:
             if error.code == 404:
@@ -258,14 +310,18 @@ class Store:
         """Apaga tudo que casa com as queries, em páginas (a rota de bulk é instável aqui)."""
         self._touched(table)
         removed = 0
+        doomed: set[str] = set()
         while True:
             rows = self.list_rows(table, list(queries) + [limit(batch)]).rows
             if not rows:
+                self._forget_rows(table, doomed)
                 return removed
             for row in rows:
                 if self.delete(table, row["$id"]):
                     removed += 1
+                    doomed.add(str(row["$id"]))
             if len(rows) < batch:
+                self._forget_rows(table, doomed)
                 return removed
 
     # -------------------------------------------------- transação
@@ -277,14 +333,22 @@ class Store:
         `create_operations` (eventos, vínculos, tags) entra aqui; a entidade principal vem por
         `create_row(..., transaction_id=)` porque é a única forma de gravar permissões na linha.
 
-        A leitura **não enxerga linha estagiada** (medido), então a foto do usuário nasce velha se já
-        estiver em cache: passe `owner_id` e ela é descartada no commit — `stage` e `delete_where`
-        não têm como saber de quem é a linha, e essa era a pegadinha.
+        A leitura **não enxerga linha estagiada** (medido), e a consulta também não enxerga a linha
+        logo depois do commit: passe `owner_id` e o `invalidate` daqui aplica na foto do dono o que
+        foi gravado nesta transação, sem reler nada do Appwrite.
         """
         transaction_id = self.tables.create_transaction(ttl)["$id"]
+        depth = getattr(self._local, "tx_depth", 0)
+        self._local.tx_depth = depth + 1
         try:
             yield transaction_id
         except Exception:
+            self._local.tx_depth = depth
+            # Transação abortada: nada do que foi guardado para a foto vale, e o que apaga sem dono
+            # (cascata) deixa as tabelas tocadas sujas — o caminho antigo, seguro.
+            self._local.pending = {}
+            self._local.staged = []
+            self._local.unattributed = True
             try:
                 self.tables.update_transaction(transaction_id, rollback=True)
             except AppwriteException:
@@ -296,11 +360,16 @@ class Store:
             # Medido nesta instância: linha repetida ou índice único violado só aparece AQUI, no
             # commit (`create_operations` não valida na hora) — e chega como "transaction has a
             # conflict". Traduzimos para a mesma `Conflict` que o create direto levanta.
+            self._local.tx_depth = depth
+            self._local.pending = {}
+            self._local.staged = []
+            self._local.unattributed = True
             if error.code == 409:
                 raise Conflict(
                     "a transação conflitou: alguma linha já existia ou um índice único foi violado"
                 ) from error
             raise
+        self._local.tx_depth = depth
         if owner_id is not None:
             self.invalidate(owner_id)
 
@@ -317,6 +386,7 @@ class Store:
             table = operation.get("tableId")
             if isinstance(table, str) and table:
                 self._touched(table)
+                self._staged(table, operation)
         cleaned = [
             {**operation, "data": _clean(operation.get("data") or {})}
             for operation in operations
@@ -353,6 +423,7 @@ class Store:
         ("notes", "notebook_tags"),
         ("blocks", "note_tags", "block_links", "note_relations"),
     )
+    PHOTO_TABLES = frozenset(name for wave in WAVES for name in wave)
 
     def snapshot(self, user_id: int | str, fresh: bool = False) -> dict[str, list[dict[str, Any]]]:
         """Todos os dados de um usuário, paginados de uma vez e guardados por alguns segundos.
@@ -392,11 +463,22 @@ class Store:
         return [documents.normalize(table, row) for row in rows]
 
     def invalidate(self, user_id: int | str) -> None:
-        """Marca para releitura as tabelas que este thread tocou.
+        """Aplica na foto o que este thread gravou; sem pendência, marca as tabelas tocadas.
 
-        Sem toque registrado (uma escrita fora das rotas conhecidas) a foto inteira é relida, que é
-        o comportamento antigo — o registro só estreita o que precisa voltar ao banco.
+        Aplicar (em vez de descartar) é o que tira a releitura do caminho da escrita: a linha
+        gravada já está em mãos. A releitura só sobra para o que não deu para aplicar — transação
+        abortada, onde as tabelas tocadas ficam sujas e voltam ao banco na leitura seguinte.
         """
+        if getattr(self._local, "tx_depth", 0):
+            return  # dentro da transação: aplica no `invalidate` de depois do commit
+        pending = getattr(self._local, "pending", None)
+        writes = pending.pop(int(user_id), ({}, {}))[0] if pending else {}
+        staged = getattr(self._local, "staged", [])
+        self._local.staged = []
+        for table, raw in staged:
+            writes.setdefault(table, {})[str(raw["$id"])] = self._normalize(table, [raw])[0]
+        orphan = bool(getattr(self._local, "unattributed", False))
+        self._local.unattributed = False
         touched = getattr(self._local, "tables", None)
         self._local.tables = set()
         with self._lock:
@@ -404,7 +486,19 @@ class Store:
             if cached is None:
                 return
             loaded_at, photo, dirty = cached
-            self._snapshots[int(user_id)] = (loaded_at, photo, dirty | (touched or set(photo)))
+            if orphan:
+                self._snapshots[int(user_id)] = (loaded_at, photo, dirty | (touched or set(photo)))
+                return
+            for table, rows in writes.items():
+                if table not in photo:
+                    continue
+                current = {str(row.get("row_id") or row["id"]): index for index, row in enumerate(photo[table])}
+                for row_id, row in rows.items():
+                    if row_id in current:
+                        photo[table][current[row_id]] = row
+                    else:
+                        photo[table].append(row)
+            self._snapshots[int(user_id)] = (loaded_at, photo, dirty)
 
     def _reload(
         self, user_id: int, photo: dict[str, list[dict[str, Any]]], dirty: set[str]

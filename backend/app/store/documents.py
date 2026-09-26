@@ -360,9 +360,11 @@ def write(
         row = _s().create(table, row_id, payload, permissions=grants, transaction_id=transaction_id)
     else:
         row = _s().update(table, row_id, payload, permissions=grants, transaction_id=transaction_id)
+    normalized = normalize(table, row)
     if owner_id is not None:
+        _s().remember(owner_id, table, normalized)
         _s().invalidate(owner_id)
-    return normalize(table, row)
+    return normalized
 
 
 def change(
