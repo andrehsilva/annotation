@@ -149,7 +149,15 @@ async def diag_timing(request: Request, call_next):
     with _DIAG_LOCK:
         _DIAG.update(calls=0, io=0.0, tx=0.0, by={})
     started = _time.perf_counter()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as error:  # DIAGNÓSTICO: o traceback volta no corpo (o Loki do painel está fora)
+        import traceback as _traceback
+
+        return JSONResponse(
+            {"diag": f"{type(error).__name__}: {error}", "trace": _traceback.format_exc()[-2500:]},
+            status_code=500,
+        )
     duration = _time.perf_counter() - started
     with _DIAG_LOCK:
         top = sorted(_DIAG["by"].items(), key=lambda item: -item[1][1])[:3]
