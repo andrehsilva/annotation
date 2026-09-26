@@ -94,3 +94,68 @@ async def schedule_sync_after_write(request: Request, call_next):
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------- DIAGNÓSTICO (temporário)
+# Conta e cronometra cada chamada ao Appwrite e devolve no header: tempo do handler, tempo de I/O,
+# número de chamadas e as três mais caras. Sai do arquivo assim que a causa da lentidão for medida.
+import os as _os
+import threading as _threading
+import time as _time
+
+from .store import client as _client
+
+_DIAG_LOCK = _threading.Lock()
+_DIAG: dict = {"calls": 0, "io": 0.0, "by": {}, "tx": 0.0}
+
+
+class _Timed:
+    """Proxy que cronometra qualquer método do serviço do SDK do Appwrite."""
+
+    def __init__(self, target, sink, name):
+        self._target, self._sink, self._name = target, sink, name
+
+    def __getattr__(self, attr):
+        value = getattr(self._target, attr)
+        if attr.startswith("_") or not callable(value):
+            return value
+
+        def wrapped(*args, **kwargs):
+            started = _time.perf_counter()
+            try:
+                return value(*args, **kwargs)
+            finally:
+                took = _time.perf_counter() - started
+                entry = self._sink["by"].setdefault(f"{self._name}.{attr}", [0, 0.0])
+                entry[0] += 1
+                entry[1] += took
+                self._sink["calls"] += 1
+                self._sink["io"] += took
+
+        return wrapped
+
+
+def _install_diag() -> None:
+    instance = _client.store()
+    instance.tables = _Timed(instance.tables, _DIAG, "tables")
+    instance.storage = _Timed(instance.storage, _DIAG, "storage")
+
+
+_install_diag()
+
+
+@app.middleware("http")
+async def diag_timing(request: Request, call_next):
+    with _DIAG_LOCK:
+        _DIAG.update(calls=0, io=0.0, tx=0.0, by={})
+    started = _time.perf_counter()
+    response = await call_next(request)
+    duration = _time.perf_counter() - started
+    with _DIAG_LOCK:
+        top = sorted(_DIAG["by"].items(), key=lambda item: -item[1][1])[:3]
+        summary = ", ".join(f"{name}={data[0]}x{data[1]:.2f}" for name, data in top)
+        calls, io_total = _DIAG["calls"], _DIAG["io"]
+    response.headers["X-BFF-Time"] = f"{duration:.3f}"
+    response.headers["X-BFF-IO"] = f"{io_total:.3f}s/{calls}calls"
+    response.headers["X-BFF-TOP"] = summary
+    return response
