@@ -166,4 +166,16 @@ async def diag_timing(request: Request, call_next):
     response.headers["X-BFF-Time"] = f"{duration:.3f}"
     response.headers["X-BFF-IO"] = f"{io_total:.3f}s/{calls}calls"
     response.headers["X-BFF-TOP"] = summary
+    with _DIAG_LOCK:
+        try:
+            cache = _client.store()._snapshots.get(1)
+            state = (
+                f"notes={len(cache[1]['notes'])} blocks={len(cache[1]['blocks'])} "
+                f"notebooks={len(cache[1]['notebooks'])} dirty={','.join(sorted(cache[2])) or '-'}"
+                if cache
+                else "sem-foto"
+            )
+        except Exception as error:  # nunca deixa o diagnóstico derrubar a resposta
+            state = f"erro: {error}"
+    response.headers["X-BFF-CACHE"] = state
     return response
