@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from .. import deps, events, links, services
+from .. import acl, deps, events, links, services
 from ..markdown import UNTITLED
 from ..schemas import (
     BlockIn,
@@ -119,8 +119,9 @@ def create_note(
             transaction_id=tx,
         )
         links.reindex_block(db, block, user.id, tx)
-        store().stage(tx, [events.operation(user.id, "created", "note", title)])
+        store().stage(tx, [events.operation(user.id, "created", "note", title, notebook_id=notebook_id)])
     store().invalidate(user.id)  # a foto lida dentro da transação ainda é a de antes do commit
+    acl.touch_notebook(db, notebook_id)  # quem mais é membro precisa ver isto
     return _serialize(db, user, note)
 
 
@@ -181,12 +182,14 @@ def create_relation(
                             "linked",
                             "relation",
                             f"{note.title or UNTITLED} → {target.title or UNTITLED}",
+                            notebook_id=note.notebook_id,
                         ),
                     ],
                 )
         except Conflict:
             pass  # o vínculo entrou entre a leitura e a escrita: já é o estado desejado
         store().invalidate(user.id)
+        acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return services.note_related(db, note)
 
 
@@ -213,10 +216,12 @@ def delete_relation(
                     "unlinked",
                     "relation",
                     f"{note.title or UNTITLED} → {other.title or UNTITLED}",
+                    notebook_id=note.notebook_id,
                 )
             ],
         )
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return services.note_related(db, note)
 
 
@@ -239,8 +244,11 @@ def update_note(
             data["updated_at"] = documents.now()
             note = documents.change("notes", note_id, data, owner_id=user.id, transaction_id=tx)
         links.rename_in_mentions(db, previous_title, data.get("title", previous_title), user.id, tx)
-        store().stage(tx, [events.operation(user.id, "updated", "note", note.title)])
+        store().stage(
+            tx, [events.operation(user.id, "updated", "note", note.title, notebook_id=note.notebook_id)]
+        )
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return _serialize(db, user, note)
 
 
@@ -263,10 +271,11 @@ def delete_note(
         db.delete_where("note_relations", [equal("source_id", str(note_id))])
         db.delete_where("note_relations", [equal("target_id", str(note_id))])
         db.delete_where("blocks", [equal("note_id", str(note_id))])
-        documents.remove("drive_files", note_id)
+        documents.remove("drive_files", documents.drive_file_id(user.id, note_id))
         documents.remove("notes", note_id, owner_id=user.id)
-        store().stage(tx, [events.operation(user.id, "deleted", "note", title)])
+        store().stage(tx, [events.operation(user.id, "deleted", "note", title, notebook_id=note.notebook_id)])
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -296,7 +305,9 @@ def attach_tag(
                 {"note_id": str(note_id), "tag_id": str(tag.id), "created_at": documents.now()},
             )
         )
-        operations.append(events.operation(user.id, "tagged", "note", note.title, tag.name))
+        operations.append(
+            events.operation(user.id, "tagged", "note", note.title, tag.name, notebook_id=note.notebook_id)
+        )
     if not on_notebook:
         # a tag nova também entra no caderno, como hoje
         operations.append(
@@ -317,6 +328,7 @@ def attach_tag(
         except Conflict:
             pass  # a tag entrou entre a leitura e a escrita: já é o estado desejado
         store().invalidate(user.id)
+        acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return _serialize(db, user, note)
 
 
@@ -338,8 +350,16 @@ def detach_tag(
             db.delete_where(
                 "note_tags", [equal("note_id", str(note_id)), equal("tag_id", str(tag.id))]
             )
-            store().stage(tx, [events.operation(user.id, "untagged", "note", note.title, tag.name)])
+            store().stage(
+                tx,
+                [
+                    events.operation(
+                        user.id, "untagged", "note", note.title, tag.name, notebook_id=note.notebook_id
+                    )
+                ],
+            )
         store().invalidate(user.id)
+        acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return _serialize(db, user, note)
 
 
@@ -376,8 +396,9 @@ def create_block(
             transaction_id=tx,
         )
         links.reindex_block(db, block, user.id, tx)
-        store().stage(tx, [events.operation(user.id, "created", "block", note.title)])
+        store().stage(tx, [events.operation(user.id, "created", "block", note.title, notebook_id=note.notebook_id)])
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return BlockOut.model_validate(block)
 
 

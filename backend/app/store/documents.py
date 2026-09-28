@@ -159,6 +159,34 @@ def member(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def group(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **_base(row),
+        "name": row.get("name") or "",
+        "created_by": to_int(row.get("created_by")),
+        "created_at": parse_dt(row.get("created_at")),
+    }
+
+
+def group_member(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "row_id": row["$id"],
+        "group_id": to_int(row.get("group_id")),
+        "user_id": to_int(row.get("user_id")),
+        "created_at": parse_dt(row.get("created_at")),
+    }
+
+
+def notebook_group(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "row_id": row["$id"],
+        "notebook_id": to_int(row.get("notebook_id")),
+        "group_id": to_int(row.get("group_id")),
+        "role": row.get("role") or "viewer",
+        "created_at": parse_dt(row.get("created_at")),
+    }
+
+
 def relation(row: dict[str, Any]) -> dict[str, Any]:
     return {
         **_base(row),
@@ -198,6 +226,7 @@ def event(row: dict[str, Any]) -> dict[str, Any]:
         "entity": row.get("entity") or "",
         "target": row.get("target") or "",
         "detail": row.get("detail") or "",
+        "notebook_id": to_int(row.get("notebook_id")),
         "created_at": parse_dt(row.get("created_at")),
     }
 
@@ -242,6 +271,9 @@ NORMALIZE = {
     "sessions": session,
     "notebooks": notebook,
     "notebook_members": member,
+    "groups": group,
+    "group_members": group_member,
+    "notebook_groups": notebook_group,
     "notes": note,
     "blocks": block,
     "tags": tag,
@@ -322,6 +354,11 @@ def operation(table: str, row_id: int | str, data: dict[str, Any]) -> dict[str, 
         "rowId": str(row_id),
         "data": _clean(data),
     }
+
+
+def drive_file_id(user_id: int | str, note_id: int | str) -> str:
+    """rowId do espelho da nota no Drive: por conta, porque o caderno pode ter mais de um membro."""
+    return f"{user_id}_{note_id}"
 
 
 def tag_key(owner_id: int | str, name: str) -> str:

@@ -29,9 +29,12 @@ from app.values import utcnow  # noqa: E402
 TABLES = (
     "note_tags",
     "notebook_tags",
+    "notebook_groups",
+    "group_members",
     "block_links",
     "note_relations",
     "notebook_members",
+    "groups",
     "blocks",
     "notes",
     "tags",

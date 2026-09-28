@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from .. import deps, events, links
+from .. import acl, deps, events, links
 from ..schemas import BlockListItem, BlockOut, BlockPatch, BlockType
 from ..store import documents, store
 from ..store.client import Store, equal
@@ -58,15 +58,19 @@ def update_block(
 ) -> BlockOut:
     block = deps.block_for(db, user, block_id)
     # o rótulo do evento sai antes da mutação, que logo abaixo mexe nos vínculos do bloco
-    note_title = documents.get("notes", block.note_id).title
+    note = deps.note_for(db, user, block.note_id)
+    note_title = note.title
     fields = payload.model_dump(exclude_unset=True)
     with store().transaction() as tx:
         if fields:
             fields["updated_at"] = documents.now()
             block = documents.change("blocks", block_id, fields, owner_id=user.id, transaction_id=tx)
         links.reindex_block(db, block, user.id, tx)
-        store().stage(tx, [events.operation(user.id, "updated", "block", note_title)])
+        store().stage(
+            tx, [events.operation(user.id, "updated", "block", note_title, notebook_id=note.notebook_id)]
+        )
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return BlockOut.model_validate(block)
 
 
@@ -78,7 +82,8 @@ def delete_block(
 ) -> Response:
     block = deps.block_for(db, user, block_id)
     note_id = block.note_id
-    note_title = documents.get("notes", note_id).title  # o bloco some, então o rótulo sai antes
+    note = deps.note_for(db, user, note_id)
+    note_title = note.title  # o bloco some, então o rótulo sai antes
     with store().transaction() as tx:
         db.delete_where("block_links", [equal("block_id", str(block_id))])
         documents.remove("blocks", block_id, owner_id=user.id)
@@ -92,6 +97,9 @@ def delete_block(
                     owner_id=user.id,
                     transaction_id=tx,
                 )
-        store().stage(tx, [events.operation(user.id, "deleted", "block", note_title)])
+        store().stage(
+            tx, [events.operation(user.id, "deleted", "block", note_title, notebook_id=note.notebook_id)]
+        )
     store().invalidate(user.id)
+    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
     return Response(status_code=status.HTTP_204_NO_CONTENT)

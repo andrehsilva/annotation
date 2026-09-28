@@ -415,12 +415,29 @@ class Store:
     # -------------------------------------------------- cache por usuário
 
     # As três ondas de dependência do `load_snapshot`, reaproveitadas para reler só o que sujou.
+    # Ondas por dependência: (1) o que pende só do usuário — membros, grupos dele, tags, mídia;
+    # (2) os grupos em si e o que os grupos alcançam; (3) o caderno (agora por participação, não por
+    # `owner_id`) e o que pendura nele; (4) blocos e junções, que precisam dos ids das notas.
     WAVES = (
-        ("notebook_members", "notebooks", "tags", "media_files"),
-        ("notes", "notebook_tags"),
+        ("group_members", "notebook_members", "tags", "media_files"),
+        ("groups", "notebook_groups"),
+        ("notebooks", "notes", "notebook_tags"),
         ("blocks", "note_tags", "block_links", "note_relations"),
     )
     PHOTO_TABLES = frozenset(name for wave in WAVES for name in wave)
+
+    @staticmethod
+    def notebook_ids_of(photo: dict[str, list[dict[str, Any]]]) -> list[str]:
+        """Todo caderno que a foto alcança: de que sou membro, de que sou dono, e os dos meus grupos."""
+        return sorted(
+            {str(row["notebook_id"]) for row in photo["notebook_members"]}
+            | {str(row["row_id"]) for row in photo["notebooks"]}
+            | {str(row["notebook_id"]) for row in photo["notebook_groups"]}
+        )
+
+    @staticmethod
+    def group_ids_of(photo: dict[str, list[dict[str, Any]]]) -> list[str]:
+        return sorted(str(row["group_id"]) for row in photo["group_members"])
 
     def snapshot(self, user_id: int | str, fresh: bool = False) -> dict[str, list[dict[str, Any]]]:
         """Todos os dados de um usuário, paginados de uma vez e guardados por alguns segundos.
@@ -505,24 +522,25 @@ class Store:
         todo = set(dirty)
 
         def notebook_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
-            # A foto já é normalizada: `row_id` é o id cru do Appwrite e os campos de id de relação
-            # viram int no modelo antigo — o `page_in` da onda seguinte quer todos como string.
-            return sorted(
-                {str(row["notebook_id"]) for row in source["notebook_members"]}
-                | {str(row["row_id"]) for row in source["notebooks"]}
-            )
+            return self.notebook_ids_of(source)
 
         def note_ids(source: dict[str, list[dict[str, Any]]]) -> list[str]:
             return sorted(str(row["row_id"]) for row in source["notes"])
 
         def load(name: str) -> list[dict[str, Any]]:
-            # Os ids saem da foto já atualizada pelas ondas anteriores: uma nota nova só aparece no
-            # `page_in` da onda 3 se a lista dela vier das notas que acabaram de voltar do banco.
-            nb_ids, nt_ids = notebook_ids(fresh), note_ids(fresh)
+            # Os ids saem da foto já atualizada pelas ondas anteriores: o caderno compartilhado por
+            # grupo só entra na lista depois que a onda dos grupos voltou do banco.
+            nb_ids, nt_ids, gp_ids = notebook_ids(fresh), note_ids(fresh), self.group_ids_of(fresh)
             if name == "notebook_members":
                 return list(self.page("notebook_members", [equal("user_id", who)]))
+            if name == "group_members":
+                return list(self.page("group_members", [equal("user_id", who)]))
+            if name == "groups":
+                return list(self.page_in("groups", "$id", gp_ids))
+            if name == "notebook_groups":
+                return list(self.page_in("notebook_groups", "group_id", gp_ids))
             if name == "notebooks":
-                return list(self.page("notebooks", [equal("owner_id", who)]))
+                return list(self.page_in("notebooks", "$id", nb_ids))
             if name == "tags":
                 return list(self.page("tags", [equal("owner_id", who)]))
             if name == "media_files":
@@ -540,58 +558,76 @@ class Store:
             return self._relations_for_snapshot(nt_ids)
 
         before_notebooks, before_notes = notebook_ids(photo), note_ids(photo)
-        for index, wave in enumerate(self.WAVES):
+        for wave in self.WAVES:
             pending = [name for name in wave if name in todo]
             if pending:
                 with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as pool:
                     futures = {name: pool.submit(load, name) for name in pending}
                     for name, future in futures.items():
                         fresh[name] = self._normalize(name, future.result())
-            # Ids que mudaram puxam as ondas seguintes: o que sai deles ficou velho junto.
-            if index == 0 and notebook_ids(fresh) != before_notebooks:
-                todo |= set(self.WAVES[1]) | set(self.WAVES[2])
-            if index == 1 and note_ids(fresh) != before_notes:
-                todo |= set(self.WAVES[2])
+            # Ids que mudaram puxam o resto: caderno novo (ou grupo novo) traz notas e blocos, nota
+            # nova traz blocos e junções. Comparado a cada onda, e não por índice de onda.
+            if notebook_ids(fresh) != before_notebooks:
+                todo |= {"notes", "notebook_tags", "blocks", "note_tags", "block_links", "note_relations"}
+                before_notebooks = notebook_ids(fresh)
+            if note_ids(fresh) != before_notes:
+                todo |= {"blocks", "note_tags", "block_links", "note_relations"}
+                before_notes = note_ids(fresh)
         return fresh
 
     def load_snapshot(self, user_id: int) -> dict[str, list[dict[str, Any]]]:
-        """Carrega as tabelas do usuário em três ondas paralelas (caderno → nota → bloco).
+        """Carrega as tabelas do usuário em quatro ondas paralelas (vínculo → grupo → caderno → bloco).
 
-        A ordem das dependências é o que define as ondas: sem os ids dos cadernos não há como pedir
-        as notas, e sem os das notas não há como pedir blocos/junções. Dentro de cada onda tudo vai
-        junto — é o que derruba a latência de ~12 idas e voltas em série para ~3.
+        A ordem das dependências é o que define as ondas: os grupos do usuário decidem quais cadernos
+        os grupos alcançam, os cadernos decidem as notas, e as notas decidem blocos e junções. Dentro
+        de cada onda tudo vai junto. O caderno entra por **participação** (membro, dono ou grupo), e
+        não por `owner_id` — era isso que deixava o caderno compartilhado fora da lista do convidado.
         """
         who = str(user_id)
         with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as pool:
             members_f = pool.submit(lambda: list(self.page("notebook_members", [equal("user_id", who)])))
-            owned_f = pool.submit(lambda: list(self.page("notebooks", [equal("owner_id", who)])))
+            groups_f = pool.submit(lambda: list(self.page("group_members", [equal("user_id", who)])))
             tags_f = pool.submit(lambda: list(self.page("tags", [equal("owner_id", who)])))
             media_f = pool.submit(lambda: list(self.page("media_files", [equal("owner_id", who)])))
-            members, owned, tags, media = members_f.result(), owned_f.result(), tags_f.result(), media_f.result()
-
-            notebook_ids = sorted(
-                {row["notebook_id"] for row in members} | {row["$id"] for row in owned}
+            members, group_members, tags, media = (
+                members_f.result(), groups_f.result(), tags_f.result(), media_f.result(),
             )
-            with ThreadPoolExecutor(max_workers=2) as second:
-                notes_f = second.submit(lambda: list(self.page_in("notes", "notebook_id", notebook_ids)))
-                notebook_tags_f = second.submit(
-                    lambda: list(self.page_in("notebook_tags", "notebook_id", notebook_ids))
-                )
-                notes, notebook_tags = notes_f.result(), notebook_tags_f.result()
-            note_ids = sorted(note["$id"] for note in notes)
 
-            with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as third:
-                blocks_f = third.submit(lambda: list(self.page_in("blocks", "note_id", note_ids)))
-                note_tags_f = third.submit(lambda: list(self.page_in("note_tags", "note_id", note_ids)))
-                links_f = third.submit(lambda: list(self.page_in("block_links", "note_id", note_ids)))
-                relations_f = third.submit(self._relations_for_snapshot, note_ids)
-                blocks, note_tags, links, relations = (
-                    blocks_f.result(), note_tags_f.result(), links_f.result(), relations_f.result(),
-                )
+        group_ids = sorted({row["group_id"] for row in group_members})
+        with ThreadPoolExecutor(max_workers=2) as second:
+            groups_f2 = second.submit(lambda: list(self.page_in("groups", "$id", group_ids)))
+            shares_f = second.submit(lambda: list(self.page_in("notebook_groups", "group_id", group_ids)))
+            groups, shares = groups_f2.result(), shares_f.result()
+
+        notebook_ids = sorted(
+            {row["notebook_id"] for row in members} | {row["notebook_id"] for row in shares}
+        )
+        with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as third:
+            notebooks_f = third.submit(lambda: list(self.page_in("notebooks", "$id", notebook_ids)))
+            notes_f = third.submit(lambda: list(self.page_in("notes", "notebook_id", notebook_ids)))
+            notebook_tags_f = third.submit(
+                lambda: list(self.page_in("notebook_tags", "notebook_id", notebook_ids))
+            )
+            notebooks, notes, notebook_tags = (
+                notebooks_f.result(), notes_f.result(), notebook_tags_f.result(),
+            )
+        note_ids = sorted(note["$id"] for note in notes)
+
+        with ThreadPoolExecutor(max_workers=SNAPSHOT_WORKERS) as fourth:
+            blocks_f = fourth.submit(lambda: list(self.page_in("blocks", "note_id", note_ids)))
+            note_tags_f = fourth.submit(lambda: list(self.page_in("note_tags", "note_id", note_ids)))
+            links_f = fourth.submit(lambda: list(self.page_in("block_links", "note_id", note_ids)))
+            relations_f = fourth.submit(self._relations_for_snapshot, note_ids)
+            blocks, note_tags, links, relations = (
+                blocks_f.result(), note_tags_f.result(), links_f.result(), relations_f.result(),
+            )
 
         return {
-            "notebooks": owned,
+            "notebooks": notebooks,
             "notebook_members": members,
+            "groups": groups,
+            "group_members": group_members,
+            "notebook_groups": shares,
             "notes": notes,
             "blocks": blocks,
             "tags": tags,

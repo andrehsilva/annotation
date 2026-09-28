@@ -130,6 +130,19 @@ def upload(
     )
 
 
+def _shared_with_me(db: Store, user: Row, filename: str) -> bool:
+    """O arquivo entra em alguma nota de caderno que eu alcanço?
+
+    O arquivo é do dono, mas a nota que o cita pode estar num caderno com mais membros — quem lê a
+    nota precisa ver a imagem dela. O que continua fechado é arquivo que não aparece em nada meu:
+    é a mesma regra do caderno compartilhado, aplicada à mídia.
+    """
+    url = f"/media/{filename}"
+    photo = db.snapshot(user.id)
+    note_ids = {note.id for note in photo["notes"]}
+    return any(block.url == url for block in photo["blocks"] if block.note_id in note_ids)
+
+
 @files_router.get("/media/{filename}", response_class=Response)
 def get_media(
     filename: str,
@@ -138,7 +151,7 @@ def get_media(
 ) -> Response:
     """Serve o arquivo só para o dono; um id alheio responde 404 como qualquer outro."""
     media = documents.media_by_filename(filename)
-    if media is None or media.owner_id != user.id:
+    if media is None or (media.owner_id != user.id and not _shared_with_me(db, user, filename)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado")
     # Nome seguro para o cabeçalho: sem quebra de linha nem aspas, que reinventariam o header.
     raw_name = media.original_name or filename

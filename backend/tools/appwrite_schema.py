@@ -161,6 +161,47 @@ TABLE_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "groups",
+        "name": "Grupos",
+        # Grupos de contas, criados e mantidos pelo admin: são eles o público do compartilhamento.
+        "columns": [
+            col("name", "string", True, 60),
+            col("created_by", "string", True, 36),
+            col("created_at", "datetime"),
+        ],
+        "indexes": [],
+    },
+    {
+        "id": "group_members",
+        "name": "Membros do grupo",
+        # rowId = "<group_id>_<user_id>"
+        "columns": [
+            col("group_id", "string", True, 36),
+            col("user_id", "string", True, 36),
+            col("created_at", "datetime"),
+        ],
+        "indexes": [
+            {"key": "idx_group_members_group", "type": "key", "columns": ["group_id"]},
+            {"key": "idx_group_members_user", "type": "key", "columns": ["user_id"]},
+        ],
+    },
+    {
+        "id": "notebook_groups",
+        "name": "Grupos do caderno",
+        # rowId = "<notebook_id>_<group_id>": o caderno compartilhado com o grupo, com o papel que
+        # vale para todo mundo dele (o papel mais alto entre esta linha e a linha direta do membro).
+        "columns": [
+            col("notebook_id", "string", True, 36),
+            col("group_id", "string", True, 36),
+            col("role", "string", True, 16),
+            col("created_at", "datetime"),
+        ],
+        "indexes": [
+            {"key": "idx_notebook_groups_notebook", "type": "key", "columns": ["notebook_id"]},
+            {"key": "idx_notebook_groups_group", "type": "key", "columns": ["group_id"]},
+        ],
+    },
+    {
         "id": "notes",
         "name": "Notas",
         "columns": [
@@ -287,31 +328,38 @@ TABLE_SPECS: list[dict[str, Any]] = [
     {
         "id": "events",
         "name": "Atividade",
+        # `notebook_id` é o que deixa os membros verem a atividade do caderno compartilhado (o evento
+        # continua sendo de quem agiu; a coluna diz onde a ação aconteceu).
         "columns": [
             col("user_id", "string", True, 36),
             col("action", "string", True, 24),
             col("entity", "string", True, 24),
             col("target", "string", size=200),
             col("detail", "string", size=80),
+            col("notebook_id", "string", False, 36),
             col("created_at", "datetime", True),
         ],
         "indexes": [
             {"key": "idx_events_user", "type": "key", "columns": ["user_id"]},
+            {"key": "idx_events_notebook", "type": "key", "columns": ["notebook_id"]},
             {"key": "idx_events_created", "type": "key", "columns": ["created_at"]},
         ],
     },
     {
         "id": "drive_files",
         "name": "Arquivos no Drive",
-        # rowId = note_id (uma linha por nota, como o unique de hoje)
+        # rowId = "<user_id>_<note_id>": o espelho é de **cada conta**. Com o caderno compartilhado,
+        # o rowId só pela nota fazia dois membros disputarem a mesma linha — o segundo encontrava a
+        # linha do primeiro e concluía que a nota dele já estava no Drive.
         "columns": [
+            col("user_id", "string", True, 36),
             col("file_id", "string", size=64),
             col("folder_id", "string", size=64),
             col("drive_path", "string", size=400),
             col("checksum", "string", size=64),
             col("synced_at", "datetime"),
         ],
-        "indexes": [],
+        "indexes": [{"key": "idx_drive_files_user", "type": "key", "columns": ["user_id"]}],
     },
     {
         "id": "drive_state",

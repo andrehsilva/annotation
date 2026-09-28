@@ -213,11 +213,66 @@ class NotebookSummary(ORMModel):
     notes_count: int
     counts: dict[str, int]
     relations_count: int
+    # Compartilhamento: o papel de quem pediu (owner/editor/viewer), se o caderno é de outra conta e
+    # quem é o dono. A tela usa isto para marcar o caderno e esconder o que não é seu.
+    role: str = "owner"
+    owner_id: int
+    owner_name: str = ""
+    shared: bool = False
 
 
 class NotebookOut(NotebookSummary):
     notes: list[NoteSummary]
     affinity: list[NotebookAffinity]
+
+
+class NotebookMemberOut(BaseModel):
+    """Quem alcança o caderno: o dono, os membros diretos e os que vêm por grupo."""
+
+    user_id: int
+    display_name: str
+    email: str
+    role: str
+    owner: bool
+    groups: list[str] = []
+
+
+class NotebookGroupIn(BaseModel):
+    role: str = "editor"
+
+
+class NotebookSharingOut(BaseModel):
+    """O painel de compartilhar: quem alcança, com qual grupo e com quais eu posso compartilhar."""
+
+    role: str
+    can_share: bool
+    members: list[NotebookMemberOut]
+    groups: list[NotebookGroupOut]
+    available: list[GroupOut]
+
+
+class NotebookGroupOut(BaseModel):
+    """Um grupo do caderno, como o painel de compartilhar mostra."""
+
+    group_id: int
+    name: str
+    role: str
+    members: int
+
+
+class GroupOut(BaseModel):
+    id: int
+    name: str
+    created_at: UTCDateTime
+    members: int
+
+
+class GroupDetail(GroupOut):
+    member_ids: list[int]
+
+
+class GroupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
 
 
 class NotebookIn(BaseModel):

@@ -14,7 +14,16 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from .. import drive, events
 from ..deps import admin_user, get_db
-from ..schemas import AdminPasswordIn, AdminUserOut, UserCreateIn, UserOut, UserUpdateIn
+from ..schemas import (
+    AdminPasswordIn,
+    AdminUserOut,
+    GroupDetail,
+    GroupIn,
+    GroupOut,
+    UserCreateIn,
+    UserOut,
+    UserUpdateIn,
+)
 from ..security import hash_password
 from ..store import BUCKET_ID, Conflict, Store, documents, equal, order_asc
 from ..store.documents import Row
@@ -62,6 +71,131 @@ def _other_active_admin(db: Store, user: Row) -> bool:
 def _drop_sessions(db: Store, user_id: int) -> None:
     """O rowId da sessão é o hash do token, então quem identifica o dono é a coluna `user_id`."""
     db.delete_where("sessions", [equal("user_id", str(user_id))])
+
+
+def _group_out(db: Store, row: Row) -> GroupOut:
+    members = db.count("group_members", [equal("group_id", str(row.id))])
+    return GroupOut(id=row.id, name=row.name, created_at=row.created_at, members=members)
+
+
+def _load_group(db: Store, group_id: int) -> Row:
+    group = documents.get("groups", group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
+    return group
+
+
+@router.get("/groups", response_model=list[GroupOut])
+def list_groups(db: Store = Depends(get_db), _admin: Row = Depends(admin_user)) -> list[GroupOut]:
+    rows = sorted(documents.all_rows("groups"), key=lambda row: row.name.lower())
+    return [_group_out(db, row) for row in rows]
+
+
+@router.post("/groups", response_model=GroupOut, status_code=status.HTTP_201_CREATED)
+def create_group(
+    payload: GroupIn, db: Store = Depends(get_db), admin: Row = Depends(admin_user)
+) -> GroupOut:
+    """Grupo nasce vazio; quem entra nele é decisão separada, membro a membro."""
+    name = payload.name.strip()
+    with db.transaction() as tx:
+        group = documents.write(
+            "groups",
+            documents.record_id("groups"),
+            {"name": name, "created_by": str(admin.id), "created_at": utcnow()},
+            owner_id=None,
+            transaction_id=tx,
+        )
+        db.stage(tx, [events.operation(admin.id, "created", "group", name)])
+    return _group_out(db, group)
+
+
+@router.get("/groups/{group_id}", response_model=GroupDetail)
+def inspect_group(
+    group_id: int, db: Store = Depends(get_db), _admin: Row = Depends(admin_user)
+) -> GroupDetail:
+    group = _load_group(db, group_id)
+    rows = list(db.page("group_members", [equal("group_id", str(group_id))]))
+    return GroupDetail(
+        **_group_out(db, group).model_dump(),
+        member_ids=sorted(documents.to_int(row["user_id"]) for row in rows),
+    )
+
+
+@router.patch("/groups/{group_id}", response_model=GroupOut)
+def rename_group(
+    group_id: int,
+    payload: GroupIn,
+    db: Store = Depends(get_db),
+    admin: Row = Depends(admin_user),
+) -> GroupOut:
+    group = _load_group(db, group_id)
+    name = payload.name.strip()
+    with db.transaction() as tx:
+        group = documents.change("groups", group.id, {"name": name}, owner_id=None, transaction_id=tx)
+        db.stage(tx, [events.operation(admin.id, "updated", "group", name)])
+    return _group_out(db, group)
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group(
+    group_id: int, db: Store = Depends(get_db), admin: Row = Depends(admin_user)
+) -> Response:
+    """Apaga o grupo, seus vínculos com cadernos e as fotos de quem participava.
+
+    Os cadernos não são tocados: quem perde o acesso é quem estava no grupo.
+    """
+    group = _load_group(db, group_id)
+    members = [documents.to_int(row["user_id"]) for row in db.page("group_members", [equal("group_id", str(group_id))])]
+    with db.transaction() as tx:
+        db.stage(tx, [events.operation(admin.id, "deleted", "group", group.name)])
+    db.delete_where("group_members", [equal("group_id", str(group_id))])
+    db.delete_where("notebook_groups", [equal("group_id", str(group_id))])
+    documents.remove("groups", group_id)
+    for user_id in members:
+        db.invalidate(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/groups/{group_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def add_group_member(
+    group_id: int,
+    user_id: int,
+    db: Store = Depends(get_db),
+    admin: Row = Depends(admin_user),
+) -> Response:
+    """Idempotente (`PUT`): repetir não duplica nem reclama — é assim que a tela manda."""
+    group = _load_group(db, group_id)
+    user = _load(db, user_id)
+    documents.conflict_free(
+        documents.write,
+        "group_members",
+        f"{group_id}_{user_id}",
+        {"group_id": str(group_id), "user_id": str(user_id), "created_at": utcnow()},
+        owner_id=None,
+    )
+    with db.transaction() as tx:
+        db.stage(
+            tx,
+            [events.operation(admin.id, "tagged", "group", group.name, user.email)],
+        )
+    db.invalidate(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/groups/{group_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_group_member(
+    group_id: int,
+    user_id: int,
+    db: Store = Depends(get_db),
+    admin: Row = Depends(admin_user),
+) -> Response:
+    group = _load_group(db, group_id)
+    user = _load(db, user_id)
+    documents.remove("group_members", f"{group_id}_{user_id}")
+    with db.transaction() as tx:
+        db.stage(tx, [events.operation(admin.id, "untagged", "group", group.name, user.email)])
+    db.invalidate(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/users", response_model=list[AdminUserOut])
@@ -212,7 +346,7 @@ def purge_user(db: Store, user_id: int) -> None:
     4. vínculos (`note_relations`, por origem e por destino);
     5. `note_tags`/`notebook_tags` por nota, por caderno e por tag (uma linha sobrevivente apontando
        para uma tag apagada seria órfã);
-    6. blocos, depois notas (e a linha de `drive_files` de cada nota, cujo rowId é o id dela);
+    6. blocos, depois notas (e o espelho de `drive_files` de cada nota, por conta);
     7. cadernos, depois as tags do dono;
     8. eventos, sessões e `drive_state` da conta, e os arquivos de token em disco.
 
@@ -247,9 +381,9 @@ def purge_user(db: Store, user_id: int) -> None:
         documents.remove("blocks", block_id, owner_id=user_id)
     for note_id in note_ids:
         documents.remove("notes", note_id, owner_id=user_id)
-        # A linha de `drive_files` da nota que ficou (caderno compartilhado) segue valendo: quem a
-        # lê é o export de quem continua no caderno, e apagá-la faria o Drive ganhar cópia repetida.
-        db.delete("drive_files", note_id)
+        # O espelho é por conta: sai só o de quem está indo embora (o do colega que fica continua
+        # valendo, senão o Drive dele ganharia cópia repetida).
+        db.delete("drive_files", documents.drive_file_id(user_id, note_id))
     for notebook_id in sorted(doomed):
         documents.remove("notebooks", notebook_id, owner_id=user_id)
     for tag_id in tag_ids:

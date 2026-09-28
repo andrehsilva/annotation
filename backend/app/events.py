@@ -26,11 +26,11 @@ ACTIONS = (
     "uploaded",
 )
 
-ENTITIES = ("notebook", "note", "block", "tag", "relation", "media", "user")
+ENTITIES = ("notebook", "note", "block", "tag", "relation", "media", "user", "group", "share")
 
 
 def _fields(
-    user_id: int, action: str, entity: str, target: str, detail: str
+    user_id: int, action: str, entity: str, target: str, detail: str, notebook_id: int | str | None = None
 ) -> dict[str, Any]:
     """Os mesmos cortes de antes: espaços colapsados e 200/80 caracteres por coluna.
 
@@ -43,50 +43,104 @@ def _fields(
         "entity": entity,
         "target": " ".join((target or "").split())[:200],
         "detail": " ".join((detail or "").split())[:80],
+        # Onde a ação aconteceu: é por esta coluna que os membros do caderno compartilhado veem a
+        # atividade uns dos outros. Fora de um caderno (conta, tag, upload) fica vazio.
+        "notebook_id": str(notebook_id) if notebook_id else "",
         "created_at": documents.to_iso(documents.now()),
     }
 
 
-def record(db, user, action: str, entity: str, target: str = "", detail: str = "") -> None:
+def record(
+    db, user, action: str, entity: str, target: str = "", detail: str = "", notebook_id: int | None = None
+) -> None:
     """Escreve o evento na hora, sem transação: scripts e `manage.py`, não rota."""
-    db.create("events", documents.record_id("events"), _fields(user.id, action, entity, target, detail))
+    db.create(
+        "events",
+        documents.record_id("events"),
+        _fields(user.id, action, entity, target, detail, notebook_id),
+    )
 
 
 def operation(
-    user_id: int, action: str, entity: str, target: str = "", detail: str = ""
+    user_id: int,
+    action: str,
+    entity: str,
+    target: str = "",
+    detail: str = "",
+    notebook_id: int | None = None,
 ) -> dict[str, Any]:
     """A operação de auditoria para `store().stage(tx, [...])`, junto com a escrita da entidade."""
     return documents.operation(
-        "events", documents.record_id("events"), _fields(user_id, action, entity, target, detail)
+        "events",
+        documents.record_id("events"),
+        _fields(user_id, action, entity, target, detail, notebook_id)
     )
 
 
 def visible(user: Row) -> list[str]:
-    """O admin acompanha a plataforma inteira; todo mundo só os próprios movimentos."""
-    if user.role == "admin":
-        return []
+    """Só os próprios movimentos. É o filtro usado quando não há caderno compartilhado em jogo."""
     return [client.equal("user_id", str(user.id))]
+
+
+def _notebook_ids(db, user: Row) -> list[str]:
+    """Os cadernos que esta conta alcança — a segunda consulta do feed."""
+    from . import acl
+
+    return acl.readable_notebook_ids(db, user.id)
+
+
+def _merge(db, user: Row, limit: int) -> list[Row]:
+    """Minhas ações + as do caderno em que eu participo, mais novas primeiro.
+
+    O Appwrite combina as queries com AND e não tem OR: são duas consultas (a minha e a dos cadernos
+    que eu alcanço, cada uma já ordenada e limitada) e a junção acontece aqui.
+    """
+    order = [client.order_desc("created_at"), client.limit(limit)]
+    rows: dict[str, dict] = {}
+    for row in db.list_rows("events", [client.equal("user_id", str(user.id)), *order]).rows:
+        rows[row["$id"]] = row
+    if user.role != "admin":
+        notebook_ids = _notebook_ids(db, user)
+        for start in range(0, len(notebook_ids), client.IN_VALUES):
+            chunk = notebook_ids[start : start + client.IN_VALUES]
+            for row in db.list_rows("events", [client.equal("notebook_id", *chunk), *order]).rows:
+                rows[row["$id"]] = row
+    ordered = sorted(rows.values(), key=lambda row: row.get("created_at") or "", reverse=True)
+    return documents.many("events", ordered[:limit])
 
 
 def feed(db, user: Row, limit: int = FEED_LIMIT) -> list[Row]:
     """As últimas ações visíveis, mais novas primeiro."""
-    queries = visible(user) + [client.order_desc("created_at"), client.limit(limit)]
-    return documents.many("events", db.list_rows("events", queries).rows)
+    if user.role == "admin":
+        queries = [client.order_desc("created_at"), client.limit(limit)]
+        return documents.many("events", db.list_rows("events", queries).rows)
+    return _merge(db, user, limit)
 
 
 def unseen(db, user: Row) -> int:
-    """Quantas ações chegaram depois do último instante que o usuário abriu a campainha."""
-    queries = visible(user)
+    """Quantas ações chegaram depois do último instante que o usuário abriu a campainha.
+
+    Mesmas duas consultas do feed, mas contando em vez de trazer linha: o número pode passar do teto
+    da página (`FEED_LIMIT`) e ainda assim estar certo.
+    """
+    since: list[str] = []
     if user.activity_seen_at is not None:
         # `greaterThan` em coluna `datetime`: o dialeto quer a string ISO (não há helper pronto).
-        queries = queries + [
+        since = [
             client.q(
                 method="greaterThan",
                 attribute="created_at",
                 values=[documents.to_iso(user.activity_seen_at)],
             )
         ]
-    return db.count("events", queries)
+    total = db.count("events", visible(user) + since)
+    if user.role == "admin":
+        return total
+    notebook_ids = _notebook_ids(db, user)
+    for start in range(0, len(notebook_ids), client.IN_VALUES):
+        chunk = notebook_ids[start : start + client.IN_VALUES]
+        total += db.count("events", [client.equal("notebook_id", *chunk), *since])
+    return total
 
 
 def mark_seen(db, user: Row) -> None:

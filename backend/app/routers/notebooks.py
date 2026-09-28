@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from .. import deps, events, services
+from .. import acl, deps, events, services
 from ..schemas import (
+    GroupOut,
+    NotebookGroupIn,
+    NotebookMemberOut,
+    NotebookGroupOut,
+    NotebookSharingOut,
     NotebookIn,
     NotebookOut,
     NotebookPatch,
@@ -96,10 +101,11 @@ def create_notebook(
                         "created_at": now,
                     },
                 ),
-                events.operation(user.id, "created", "notebook", title),
+                events.operation(user.id, "created", "notebook", title, notebook_id=notebook.id),
             ],
         )
     store().invalidate(user.id)  # a foto lida dentro da transação ainda é a de antes do commit
+    acl.touch_notebook(db, notebook.id)  # quem mais é membro precisa ver isto
     return services.notebook_detail(db, user.id, deps.notebook_for(db, user, notebook.id))
 
 
@@ -132,8 +138,12 @@ def update_notebook(
             notebook = documents.change(
                 "notebooks", notebook_id, data, owner_id=user.id, transaction_id=tx
             )
-        store().stage(tx, [events.operation(user.id, "updated", "notebook", notebook.title)])
+        store().stage(
+            tx,
+            [events.operation(user.id, "updated", "notebook", notebook.title, notebook_id=notebook.id)],
+        )
     store().invalidate(user.id)
+    acl.touch_notebook(db, notebook_id)  # quem mais é membro precisa ver isto
     return services.notebook_detail(db, user.id, notebook)
 
 
@@ -159,14 +169,123 @@ def delete_notebook(
         _drop_all(db, "note_relations", "target_id", note_args)
         _drop_all(db, "blocks", "note_id", note_args)
         for note_id in note_args:
-            documents.remove("drive_files", note_id)  # o rowId do espelho é o id da nota
+            documents.remove("drive_files", documents.drive_file_id(user.id, note_id))  # espelho por conta
             documents.remove("notes", note_id, owner_id=user.id)
         db.delete_where("notebook_tags", [equal("notebook_id", str(notebook_id))])
         db.delete_where("notebook_members", [equal("notebook_id", str(notebook_id))])
         documents.remove("notebooks", notebook_id, owner_id=user.id)
-        store().stage(tx, [events.operation(user.id, "deleted", "notebook", title)])
+        store().stage(tx, [events.operation(user.id, "deleted", "notebook", title, notebook_id=notebook_id)])
     store().invalidate(user.id)
+    acl.touch_notebook(db, notebook_id)  # quem mais é membro precisa ver isto
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _sharing(db: Store, user: documents.Row, notebook: documents.Row) -> NotebookSharingOut:
+    """Quem alcança o caderno e com quais grupos ele está compartilhado.
+
+    Lido direto das tabelas (e não da foto): o painel de compartilhar precisa do estado de agora,
+    inclusive o grupo que entrou há segundos.
+    """
+    shares = list(db.page("notebook_groups", [equal("notebook_id", str(notebook.id))]))
+    group_ids = [row["group_id"] for row in shares]
+    names = {
+        str(row["$id"]): row.get("name") or ""
+        for row in db.page_in("groups", "$id", group_ids)
+    }
+    counts = {
+        row["group_id"]: db.count("group_members", [equal("group_id", row["group_id"])])
+        for row in shares
+    }
+    return NotebookSharingOut(
+        role=acl.role_for(db, user.id, notebook.id) or "viewer",
+        can_share=acl.is_owner(db, user.id, notebook.id),
+        members=[NotebookMemberOut(**member) for member in acl.members_of(db, notebook.id)],
+        groups=[
+            NotebookGroupOut(
+                group_id=documents.to_int(row["group_id"]),
+                name=names.get(row["group_id"], ""),
+                role=row.get("role") or "editor",
+                members=counts.get(row["group_id"], 0),
+            )
+            for row in sorted(shares, key=lambda row: names.get(row["group_id"], "").lower())
+        ],
+        # A lista para escolher: todos os grupos do servidor (quem compõe cada um é o admin), e só
+        # para quem pode compartilhar.
+        available=(
+            [
+                GroupOut(
+                    id=row.id,
+                    name=row.name,
+                    created_at=row.created_at,
+                    members=db.count("group_members", [equal("group_id", str(row.id))]),
+                )
+                for row in sorted(documents.all_rows("groups"), key=lambda row: row.name.lower())
+            ]
+            if acl.is_owner(db, user.id, notebook.id)
+            else []
+        ),
+    )
+
+
+@router.get("/{notebook_id}/members", response_model=NotebookSharingOut)
+def list_members(
+    notebook_id: int,
+    user: documents.Row = Depends(deps.current_user),
+    db: Store = Depends(deps.get_db),
+) -> NotebookSharingOut:
+    notebook = deps.notebook_for(db, user, notebook_id, "viewer")
+    return _sharing(db, user, notebook)
+
+
+@router.post(
+    "/{notebook_id}/groups/{group_id}",
+    response_model=NotebookSharingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def share_with_group(
+    notebook_id: int,
+    group_id: int,
+    payload: NotebookGroupIn,
+    user: documents.Row = Depends(deps.current_user),
+    db: Store = Depends(deps.get_db),
+) -> NotebookSharingOut:
+    """Compartilha o caderno com um grupo — só o dono, e com qualquer grupo do servidor.
+
+    Quem entra no grupo depois alcança o caderno sozinho: o vínculo é com o grupo, não com cada
+    pessoa. Quem compõe os grupos é o admin (`/api/admin/groups`); o dono só escolhe entre eles.
+    """
+    notebook = deps.notebook_for(db, user, notebook_id, "owner")
+    group = documents.get("groups", group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
+    role = payload.role if payload.role in acl.ROLES else "editor"
+    with store().transaction() as tx:
+        acl.share_group(db, notebook.id, group.id, role)
+        store().stage(
+            tx,
+            [events.operation(user.id, "shared", "share", notebook.title, group.name, notebook_id=notebook.id)],
+        )
+    return _sharing(db, user, notebook)
+
+
+@router.delete("/{notebook_id}/groups/{group_id}", response_model=NotebookSharingOut)
+def unshare_group(
+    notebook_id: int,
+    group_id: int,
+    user: documents.Row = Depends(deps.current_user),
+    db: Store = Depends(deps.get_db),
+) -> NotebookSharingOut:
+    notebook = deps.notebook_for(db, user, notebook_id, "owner")
+    group = documents.get("groups", group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
+    with store().transaction() as tx:
+        acl.unshare_group(db, notebook.id, group.id)
+        store().stage(
+            tx,
+            [events.operation(user.id, "unshared", "share", notebook.title, group.name, notebook_id=notebook.id)],
+        )
+    return _sharing(db, user, notebook)
 
 
 @router.post("/{notebook_id}/tags/{tag_id}", response_model=NotebookOut)
@@ -197,12 +316,15 @@ def attach_tag(
                                 "created_at": documents.now(),
                             },
                         ),
-                        events.operation(user.id, "tagged", "notebook", notebook.title, tag.name),
+                        events.operation(
+                            user.id, "tagged", "notebook", notebook.title, tag.name, notebook_id=notebook_id
+                        ),
                     ],
                 )
         except Conflict:
             pass  # a tag entrou entre a leitura e a escrita: já é o estado desejado
         store().invalidate(user.id)
+        acl.touch_notebook(db, notebook_id)  # quem mais é membro precisa ver isto
     return services.notebook_detail(db, user.id, notebook)
 
 
@@ -225,6 +347,14 @@ def detach_tag(
                 "notebook_tags",
                 [equal("notebook_id", str(notebook_id)), equal("tag_id", str(tag.id))],
             )
-            store().stage(tx, [events.operation(user.id, "untagged", "notebook", notebook.title, tag.name)])
+            store().stage(
+                tx,
+                [
+                    events.operation(
+                        user.id, "untagged", "notebook", notebook.title, tag.name, notebook_id=notebook_id
+                    )
+                ],
+            )
         store().invalidate(user.id)
+        acl.touch_notebook(db, notebook_id)  # quem mais é membro precisa ver isto
     return services.notebook_detail(db, user.id, notebook)

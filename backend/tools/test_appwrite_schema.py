@@ -126,7 +126,7 @@ check("--check em instância vazia devolve 1", code == 1)
 code = schema.run(apply=True)
 check("--apply devolve 0", code == 0)
 check("database criado", schema.DATABASE_ID in tables.databases)
-check("17 tabelas criadas", len(tables.databases[schema.DATABASE_ID]) == len(schema.TABLE_SPECS))
+check(f"{len(schema.TABLE_SPECS)} tabelas criadas", len(tables.databases[schema.DATABASE_ID]) == len(schema.TABLE_SPECS))
 expected_indexes = sum(len(s["indexes"]) for s in schema.TABLE_SPECS)
 created_indexes = sum(
     len(t["indexes"]) for t in tables.databases[schema.DATABASE_ID].values()

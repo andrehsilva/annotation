@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Iterable, Literal
 
+from . import acl
 from .markdown import UNTITLED
 from .schemas import (
     Backlink,
@@ -173,12 +174,25 @@ def note_counts_by_notebook(db: Store, user_id: int) -> dict[int, int]:
 # ------------------------------------------------------------------ resumos
 
 
+def _owner_names(db: Store, photo: dict) -> dict[int, str]:
+    """Nome do dono de cada caderno da foto, numa consulta só."""
+    ids = sorted({str(row.owner_id) for row in photo["notebooks"]})
+    if not ids:
+        return {}
+    return {
+        documents.to_int(row["$id"]): (row.get("display_name") or row.get("email") or "")
+        for row in db.page_in("users", "$id", ids)
+    }
+
+
 def notebook_summary(
     notebook: documents.Row,
     notes_count: int,
     counts: dict[str, int],
     relations_count: int,
     tags: Iterable[documents.Row] = (),
+    role: str = "owner",
+    owner_name: str = "",
 ) -> NotebookSummary:
     """`relations_count` here is how many other notebooks this one reaches through its notes.
 
@@ -195,6 +209,10 @@ def notebook_summary(
         notes_count=notes_count,
         counts={**empty_counts(), **counts},
         relations_count=relations_count,
+        role=role,
+        owner_id=notebook.owner_id,
+        owner_name=owner_name,
+        shared=role != "owner",
     )
 
 
@@ -204,6 +222,7 @@ def list_notebook_summaries(db: Store, user_id: int) -> list[NotebookSummary]:
     notes = note_counts_by_notebook(db, user_id)
     affinity = affinity_counts_by_notebook(db, user_id)
     tags = _tags_by(photo, "notebook_tags", "notebook_id")
+    owners = _owner_names(db, photo)
     return [
         notebook_summary(
             notebook,
@@ -211,6 +230,8 @@ def list_notebook_summaries(db: Store, user_id: int) -> list[NotebookSummary]:
             counts.get(notebook.id, {}),
             affinity.get(notebook.id, 0),
             tags.get(notebook.id, ()),
+            acl.role_in_photo(photo, notebook.id) or "viewer",
+            owners.get(notebook.owner_id, ""),
         )
         for notebook in sorted(photo["notebooks"], key=lambda row: (row.title, row.id))
     ]
@@ -262,6 +283,8 @@ def notebook_detail(db: Store, user_id: int, notebook: documents.Row) -> Noteboo
             block_counts_by_notebook(db, user_id).get(notebook.id, {}),
             len(affinity),
             tags.get(notebook.id, ()),
+            acl.role_in_photo(photo, notebook.id) or "viewer",
+            _owner_names(db, photo).get(notebook.owner_id, ""),
         ).model_dump(),
         notes=[note_summary(note, counts.get(note.id), notebook.title) for note in notes],
         affinity=affinity,

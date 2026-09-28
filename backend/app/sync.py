@@ -268,10 +268,10 @@ def _export(db: Store, user_id: int) -> SyncSummary:
         )
         checksum = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
         try:
-            row = db.get("drive_files", note.id)
+            row = db.get("drive_files", documents.drive_file_id(user_id, note.id))
             if row is None:
                 file_id = _upload_markdown(service, markdown, filename, folder["id"])
-                _remember(db, note.id, file_id, folder["id"], path, checksum, create=True)
+                _remember(db, user_id, note.id, file_id, folder["id"], path, checksum, create=True)
                 notes_sent += 1
             else:
                 moved = row.get("folder_id") != folder["id"] or row.get("drive_path") != path
@@ -281,7 +281,7 @@ def _export(db: Store, user_id: int) -> SyncSummary:
                 if changed:
                     _replace_markdown(service, row["file_id"], markdown)
                 if moved or changed:
-                    _remember(db, note.id, row["file_id"], folder["id"], path, checksum, create=False)
+                    _remember(db, user_id, note.id, row["file_id"], folder["id"], path, checksum, create=False)
                     notes_sent += 1
                 else:
                     notes_unchanged += 1
@@ -307,6 +307,7 @@ def _export(db: Store, user_id: int) -> SyncSummary:
 
 def _remember(
     db: Store,
+    user_id: int,
     note_id: int,
     file_id: str,
     folder_id: str,
@@ -315,18 +316,21 @@ def _remember(
     *,
     create: bool,
 ) -> None:
-    """Uma linha por nota (`rowId` = id da nota): é ela que diz o que já está no Drive."""
+    """Uma linha por nota **e por conta** (`rowId` = `<user_id>_<note_id>`): é ela que diz o que já
+    está no Drive daquele usuário. No caderno compartilhado cada membro tem o seu espelho."""
     data = {
+        "user_id": str(user_id),
         "file_id": file_id,
         "folder_id": folder_id,
         "drive_path": path,
         "checksum": checksum,
         "synced_at": documents.to_iso(utcnow()),
     }
+    row_id = documents.drive_file_id(user_id, note_id)
     if create:
-        db.create("drive_files", note_id, data)
+        db.create("drive_files", row_id, data)
     else:
-        db.update("drive_files", note_id, data)
+        db.update("drive_files", row_id, data)
 
 
 # ------------------------------------------------------------------- dados

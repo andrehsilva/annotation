@@ -20,6 +20,7 @@ from .routers import (
     blocks,
     drive,
     events,
+    groups,
     media,
     notebooks,
     notes,
@@ -70,6 +71,7 @@ app.include_router(media.files_router)
 app.include_router(search.router)
 app.include_router(relations.router)
 app.include_router(events.router)
+app.include_router(groups.router)
 app.include_router(drive.router)
 
 
