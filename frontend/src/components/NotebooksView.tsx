@@ -61,10 +61,11 @@ export function NotebooksView({
                     {notebook.shared && (
                       <span
                         className="tag-chip is-shared"
-                        title={`Caderno de ${notebook.owner_name || "outra conta"}`}
+                        title={`Compartilhado com você por ${notebook.owner_name || "outra conta"}`}
                       >
                         <UsersThree size={11} weight="bold" />
-                        {notebook.owner_name || "outra conta"} · {SHARE_ROLE_LABELS[notebook.role]}
+                        Compartilhado por {notebook.owner_name || "outra conta"} ·{" "}
+                        {SHARE_ROLE_LABELS[notebook.role]}
                       </span>
                     )}
                     {notebook.notes_count} {notebook.notes_count === 1 ? "nota" : "notas"}

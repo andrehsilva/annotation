@@ -196,10 +196,10 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
 - No cabeçalho do caderno, **Compartilhar** abre o painel de quem alcança aquele caderno: cada conta
   com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Só o dono vê os controles — escolher
   um grupo com "pode escrever" ou "só pode ler", trocar o papel de um grupo já compartilhado e
-  **Remover**. Os cadernos que chegaram de outra conta aparecem marcados com o nome do dono e o seu
-  papel (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu não aparece:
-  título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não há barra de
-  nota nova, lixeira de nota nem edição de tag.
+  **Remover**. Os cadernos que chegaram de outra conta aparecem com um chip **Compartilhado por
+  «dono» · «papel»** (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu
+  não aparece: título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não
+  há barra de nota nova, lixeira de nota nem edição de tag.
 - Dentro da nota, o botão ao lado de **voltar** inverte a ordem dos blocos (mais novos primeiro); a
   faixa "continue escrevendo" e a linha de ícones/atalhos vão junto, de modo que o próximo bloco entra
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo

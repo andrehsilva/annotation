@@ -88,7 +88,7 @@ export function Sidebar({
               {notebook.shared && (
                 <span
                   className="nb-item-shared"
-                  title={`De ${notebook.owner_name || "outra conta"} · ${SHARE_ROLE_LABELS[notebook.role]}`}
+                  title={`Compartilhado por ${notebook.owner_name || "outra conta"} · ${SHARE_ROLE_LABELS[notebook.role]}`}
                 >
                   <UsersThree size={12} weight="bold" />
                 </span>
