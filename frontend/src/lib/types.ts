@@ -20,6 +20,8 @@ export interface Block {
   language: string;
   url: string;
   caption: string;
+  /** Quem escreveu, quando não é você (caderno compartilhado); vazio nos seus blocos. */
+  author: string;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +33,7 @@ export interface BlockListItem {
   language: string;
   url: string;
   caption: string;
+  author: string;
   updated_at: string;
   note_id: number;
   note_title: string;

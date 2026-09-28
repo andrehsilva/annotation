@@ -161,6 +161,11 @@ export function BlockCard({
           <KindIcon size={13} weight="bold" />
           {KIND_LABELS[block.type]}
         </button>
+        {block.author && (
+          <span className="block-author" title={`Escrito por ${block.author}`}>
+            {block.author}
+          </span>
+        )}
       </div>
 
       <div className="block-body">

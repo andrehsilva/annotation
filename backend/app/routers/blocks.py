@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from .. import acl, deps, events, links
+from .. import acl, deps, events, links, services
 from ..schemas import BlockListItem, BlockOut, BlockPatch, BlockType
 from ..store import documents, store
 from ..store.client import Store, equal
@@ -31,6 +31,13 @@ def list_blocks(
     if type is not None:
         blocks = [block for block in blocks if block.type == type]
     blocks.sort(key=lambda block: (block.updated_at, block.id), reverse=True)
+    shown = blocks[:limit]
+    owners = {notebook.id: notebook.owner_id for notebook in photo["notebooks"]}
+    authors = services.block_authors(
+        db,
+        user.id,
+        [(block, owners.get(notes[block.note_id].notebook_id, 0)) for block in shown],
+    )
     return [
         BlockListItem(
             id=block.id,
@@ -39,13 +46,14 @@ def list_blocks(
             language=block.language,
             url=block.url,
             caption=block.caption,
+            author=authors.get(block.id, ""),
             updated_at=block.updated_at,
             note_id=block.note_id,
             note_title=notes[block.note_id].title,
             notebook_id=notes[block.note_id].notebook_id,
             notebook_title=titles.get(notes[block.note_id].notebook_id, ""),
         )
-        for block in blocks[:limit]
+        for block in shown
     ]
 
 

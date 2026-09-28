@@ -44,12 +44,19 @@ def _serialize(db: Store, user: documents.Row, note: documents.Row) -> NoteOut:
         (row for row in photo["blocks"] if row.note_id == note.id),
         key=lambda row: (row.position, row.id),
     )
+    owner = services.notebook_owner(photo, note.notebook_id)
+    authors = services.block_authors(db, user.id, [(block, owner) for block in blocks])
     tagged = {link.tag_id for link in photo["note_tags"] if link.note_id == note.id}
     tags = sorted(
         (tag for tag in photo["tags"] if tag.id in tagged), key=lambda tag: (tag.name, tag.id)
     )
     return NoteOut.model_validate(
-        {**note, "tags": tags, "blocks": blocks, "relations": services.note_relations_for(db, note)}
+        {
+            **note,
+            "tags": tags,
+            "blocks": [{**block, "author": authors.get(block.id, "")} for block in blocks],
+            "relations": services.note_relations_for(db, note),
+        }
     )
 
 
@@ -112,6 +119,7 @@ def create_note(
                 "position": 0,
                 "type": "text",
                 "text": payload.text,
+                "created_by": str(user.id),
                 "created_at": now,
                 "updated_at": now,
             },
@@ -389,6 +397,7 @@ def create_block(
                 "language": payload.language,
                 "url": payload.url,
                 "caption": payload.caption,
+                "created_by": str(user.id),
                 "created_at": now,
                 "updated_at": now,
             },
@@ -428,5 +437,10 @@ def reorder_blocks(
             for position, block_id in enumerate(payload.block_ids)
         ]
     store().invalidate(user.id)
-    return [BlockOut.model_validate(block) for block in ordered]
+    photo = db.snapshot(user.id)
+    owner = services.notebook_owner(photo, note.notebook_id)
+    authors = services.block_authors(db, user.id, [(block, owner) for block in ordered])
+    return [
+        BlockOut.model_validate({**block, "author": authors.get(block.id, "")}) for block in ordered
+    ]
 

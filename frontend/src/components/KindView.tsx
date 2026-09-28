@@ -55,6 +55,11 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindVi
         {item.notebook_title} <span className="element-arrow">›</span>{" "}
         {item.note_title || "nota sem título"}
       </span>
+      {item.author && (
+        <span className="element-author" title={`Escrito por ${item.author}`}>
+          por {item.author}
+        </span>
+      )}
       <span className="element-time">{relativeTime(item.updated_at)}</span>
       <button type="button" className="btn btn-ghost btn-compact" onClick={() => openNote(item)}>
         <NoteBlank size={13} /> Abrir nota

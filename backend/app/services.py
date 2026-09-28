@@ -174,6 +174,33 @@ def note_counts_by_notebook(db: Store, user_id: int) -> dict[int, int]:
 # ------------------------------------------------------------------ resumos
 
 
+def block_authors(
+    db: Store, viewer_id: int, blocks: Iterable[tuple[documents.Row, int]]
+) -> dict[int, str]:
+    """{id do bloco: nome de quem escreveu}, só para os blocos de outra conta.
+
+    Cada item é `(bloco, dono do caderno)`: o dono é a resposta para as linhas de antes de
+    `created_by`, quando quem escrevia era ele. Num caderno só meu — o caso comum — nada é consultado.
+    """
+    pairs = [(block, block.created_by or owner_id) for block, owner_id in blocks]
+    others = sorted({author for _block, author in pairs if author and author != viewer_id})
+    if not others:
+        return {}
+    names = {
+        documents.to_int(row["$id"]): (row.get("display_name") or row.get("email") or "")
+        for row in db.page_in("users", "$id", [str(author) for author in others])
+    }
+    return {block.id: names[author] for block, author in pairs if names.get(author)}
+
+
+def notebook_owner(photo: dict, notebook_id: int) -> int:
+    """O dono do caderno na foto: resposta para os blocos antigos, sem `created_by`."""
+    for row in photo["notebooks"]:
+        if row.id == notebook_id:
+            return row.owner_id
+    return 0
+
+
 def _owner_names(db: Store, photo: dict) -> dict[int, str]:
     """Nome do dono de cada caderno da foto, numa consulta só."""
     ids = sorted({str(row.owner_id) for row in photo["notebooks"]})

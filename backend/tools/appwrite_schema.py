@@ -228,6 +228,9 @@ TABLE_SPECS: list[dict[str, Any]] = [
             col("language", "string", size=40),
             col("url", "string", size=2000),
             col("caption", "string", size=2000),
+            # Quem escreveu o bloco: é o que a nota compartilhada mostra em cada bloco que não é seu.
+            # Vazio nas linhas de antes desta coluna — quem escrevia, aí, era o dono do caderno.
+            col("created_by", "string", False, 36),
             col("created_at", "datetime"),
             col("updated_at", "datetime"),
         ],

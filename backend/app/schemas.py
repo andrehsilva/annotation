@@ -58,6 +58,9 @@ class BlockOut(ORMModel):
     language: str
     url: str
     caption: str
+    # Quem escreveu o bloco, quando não é quem está lendo: é o que a nota compartilhada mostra em cada
+    # bloco. Vazio para os blocos da própria conta (e para um autor já apagado).
+    author: str = ""
     created_at: UTCDateTime
     updated_at: UTCDateTime
 
@@ -98,6 +101,7 @@ class BlockListItem(BaseModel):
     language: str
     url: str
     caption: str
+    author: str = ""
     updated_at: UTCDateTime
     note_id: int
     note_title: str

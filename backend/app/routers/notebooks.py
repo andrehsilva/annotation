@@ -81,6 +81,7 @@ def create_notebook(
                 "position": 0,
                 "type": "text",
                 "text": "",
+                "created_by": str(user.id),
                 "created_at": now,
                 "updated_at": now,
             },

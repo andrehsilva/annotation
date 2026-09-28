@@ -135,6 +135,8 @@ def block(row: dict[str, Any]) -> dict[str, Any]:
         "language": row.get("language") or "",
         "url": row.get("url") or "",
         "caption": row.get("caption") or "",
+        # Quem escreveu: vazio nas linhas anteriores a esta coluna (o dono do caderno, na prática).
+        "created_by": to_int(row.get("created_by")),
         **_stamps(row),
     }
 

@@ -70,7 +70,7 @@ não há SDK, CORS nem cookie de terceiro no navegador.
 | --- | --- | --- |
 | `users` | conta, papel, `is_active`, hash da senha, `activity_seen_at` | id numérico (legado verbatim) |
 | `sessions` | sessão do cookie: sha256 do token **truncado a 32 chars** (o `$id` aceita 36) | id truncado |
-| `notebooks`, `notes`, `blocks` | o conteúdo, com `position` para a ordem | id numérico |
+| `notebooks`, `notes`, `blocks` | o conteúdo, com `position` para a ordem; em `blocks`, `created_by` diz quem escreveu | id numérico |
 | `notebook_members` | papel do usuário no caderno (`owner`/`editor`/`viewer`) | `<user_id>_<notebook_id>` |
 | `groups`, `group_members` | grupo de contas (o público do compartilhamento, criado pelo admin) e quem está nele | id numérico / `<group_id>_<user_id>` |
 | `notebook_groups` | caderno compartilhado com um grupo, com o papel que vale para todo mundo dele | `<notebook_id>_<group_id>` |
@@ -200,6 +200,9 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   «dono» · «papel»** (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu
   não aparece: título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não
   há barra de nota nova, lixeira de nota nem edição de tag.
+- Em caderno compartilhado, **cada bloco que não é seu traz o nome de quem o escreveu** — embaixo do
+  tipo, dentro da nota, e no pé do cartão da lista por tipo. Nos próprios blocos não aparece nome
+  nenhum, e os blocos gravados antes desta coluna saem com o nome do dono do caderno.
 - Dentro da nota, o botão ao lado de **voltar** inverte a ordem dos blocos (mais novos primeiro); a
   faixa "continue escrevendo" e a linha de ícones/atalhos vão junto, de modo que o próximo bloco entra
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
@@ -324,7 +327,10 @@ usuário (`owner_id` + nome único por dono): a mesma palavra em duas contas sã
 renomear/apagar a de um não toca na do outro.
 
 Cada bloco tem `type` e os campos `text`, `language`, `url`, `caption`; só os relevantes para o tipo
-são usados, o que mantém a troca de tipo (Alt+Espaço) sem perda de conteúdo.
+são usados, o que mantém a troca de tipo (Alt+Espaço) sem perda de conteúdo. Em `blocks`, `created_by`
+guarda quem escreveu aquele bloco — é o que a nota compartilhada mostra em cada bloco que **não é
+seu** ("Isis"), e o que fica vazio nos blocos da própria conta. Nas linhas gravadas antes desta
+coluna o nome que aparece é o do dono do caderno, que era quem escrevia.
 
 `note_relations` guarda uma linha por par (a direção só registra quem declarou, como o antigo vínculo
 de caderno) e `block_links` uma linha por menção resolvida — as duas caem junto com a nota

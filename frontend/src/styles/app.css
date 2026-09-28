@@ -1542,6 +1542,24 @@ iframe.element-media {
   font-size: 12px;
 }
 
+/* O bloco de outra conta, no caderno compartilhado: o nome de quem escreveu, no canto da rail. */
+.block-author {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O mesmo nome, no cartão da lista por tipo. */
+.element-author {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* O PDF é um cartão clicável: quem desenha é o visualizador do navegador, na aba nova. */
 .pdf-link {
   display: flex;
