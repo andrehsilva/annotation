@@ -6,8 +6,7 @@ livre e o tipo do bloco troca no teclado, sem tirar a mão da linha.
 
 Cada pessoa entra com **e-mail e senha** e enxerga os próprios cadernos — e os que o dono
 compartilhou com os grupos dela. Fora desses, notas, blocos, tags, vínculos e arquivos são de quem os
-criou. Quem cria as contas é o **admin**, na tela **Usuários** — e os grupos do compartilhamento
-também são dele (por ora só pela API: a tela ainda não existe).
+criou. Quem cria as contas e os grupos é o **admin**, na área **Admin**.
 
 - Backend: FastAPI como BFF fino, com **Appwrite como camada de dados** (`backend/`)
 - Frontend: React 19 + Vite + TypeScript (`frontend/`)
@@ -110,10 +109,13 @@ requisições e compara as respostas), `test_appwrite_schema.py` (idempotência 
 
 - **Entrar**: só com e-mail e senha; a sessão é um cookie `notai_session` (httpOnly, 30 dias).
   Não existe autocadastro: sem conta, o admin cria uma.
-- **Admin**: o chip **Usuários** (só aparece para quem tem o papel) lista todo mundo com cadernos,
-  notas, blocos e espaço de mídia, cria conta, redefine senha, ativa/desativa e exclui. Excluir leva
-  junto cadernos, notas, vínculos e os arquivos enviados — o diálogo diz isso antes. O admin não
-  consegue rebaixar, desativar nem excluir a própria conta, e o último admin ativo fica protegido.
+- **Admin**: o chip de admin (só aparece para quem tem o papel) abre a área **Admin**, em duas abas.
+  **Usuários** lista todo mundo com cadernos, notas, blocos e espaço de mídia, cria conta, redefine
+  senha, ativa/desativa e exclui. Excluir leva junto cadernos, notas, vínculos e os arquivos enviados
+  — o diálogo diz isso antes. O admin não consegue rebaixar, desativar nem excluir a própria conta, e
+  o último admin ativo fica protegido. **Grupos** cria, renomeia e apaga os grupos do
+  compartilhamento e decide quem está em cada um: o grupo nasce vazio e quem entra depois já alcança
+  tudo o que o grupo alcança.
 - **Qualquer um**: o chip do próprio nome (antes do botão do Drive) tem **Trocar senha** e **Sair**.
   Trocar a senha derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de alguém,
   derruba todas.
@@ -191,6 +193,13 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   Cada linha diz quem fez, o quê e em quê: “criou a nota «X»”, “marcou «Y» com a tag «ideias»”,
   “apagou o caderno «Z»”.
 - O chip com o próprio nome, à direita antes do botão do Drive, abre **Trocar senha** e **Sair**.
+- No cabeçalho do caderno, **Compartilhar** abre o painel de quem alcança aquele caderno: cada conta
+  com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Só o dono vê os controles — escolher
+  um grupo com "pode escrever" ou "só pode ler", trocar o papel de um grupo já compartilhado e
+  **Remover**. Os cadernos que chegaram de outra conta aparecem marcados com o nome do dono e o seu
+  papel (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu não aparece:
+  título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não há barra de
+  nota nova, lixeira de nota nem edição de tag.
 - Dentro da nota, o botão ao lado de **voltar** inverte a ordem dos blocos (mais novos primeiro); a
   faixa "continue escrevendo" e a linha de ícones/atalhos vão junto, de modo que o próximo bloco entra
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
@@ -299,9 +308,10 @@ o **maior** entre a linha direta e o que os grupos concedem, e `acl.py` é o ún
 isso, com a matriz: `viewer` lê; `editor` escreve conteúdo; `owner` renomeia, apaga e compartilha.
 Toda consulta passa por `acl.readable_notebook_ids` (a foto do usuário cobre vínculo direto e grupo) e
 todo id que chega pela URL passa por um loader que confere o papel e responde `404` quando não é de
-quem pediu. As rotas de compartilhar já respondem (`GET /api/groups`, `GET /api/notebooks/{id}/members`,
-`POST/DELETE /api/notebooks/{id}/groups/{group_id}` e o CRUD de grupos do admin); **a tela ainda não
-existe**.
+quem pediu. As rotas de compartilhar (`GET /api/groups`, `GET /api/notebooks/{id}/members`,
+`POST/DELETE /api/notebooks/{id}/groups/{group_id}`) e o CRUD de grupos do admin são o que a tela usa:
+**Compartilhar**, no cabeçalho do caderno, mostra quem alcança (com o papel e o grupo de cada um) e —
+para o dono — escolhe o grupo e o papel; a aba **Grupos** do admin monta os grupos.
 
 `users` guarda e-mail (único, minúsculo), nome, `role` (`admin` ou `user`), `is_active` e o hash da
 senha — nunca a senha. `sessions` guarda o `sha256` do token do cookie, o dono e a validade; apagar a

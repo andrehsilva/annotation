@@ -21,7 +21,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 from .store import documents
-from .store.client import SNAPSHOT_WORKERS, Store, equal
+from .store.client import SNAPSHOT_WORKERS, Conflict, Store, equal
 from .store.documents import Row
 
 ROLE_RANK: dict[str, int] = {"viewer": 0, "editor": 1, "owner": 2}
@@ -170,19 +170,27 @@ def touch_notebook(db: Store, notebook_id: int) -> None:
 
 
 def share_group(db: Store, notebook_id: int, group_id: int, role: str) -> None:
-    """Caderno → grupo, com o papel que vale para todo mundo dele. Linha de servidor (sem permissão
-    de cliente, como o resto que a API key lê) e foto dos membros descartada na hora."""
-    documents.write(
-        "notebook_groups",
-        f"{notebook_id}_{group_id}",
-        {
-            "notebook_id": str(notebook_id),
-            "group_id": str(group_id),
-            "role": role,
-            "created_at": documents.now(),
-        },
-        owner_id=None,
-    )
+    """Caderno → grupo, com o papel que vale para todo mundo dele.
+
+    Repetir o mesmo grupo não é erro nem duplica: a linha é a mesma (`rowId`) e o papel é reescrito —
+    é assim que a tela troca um `editor` por `viewer` sem tirar e pôr de novo. Linha de servidor (sem
+    permissão de cliente, como o resto que a API key lê) e foto dos membros descartada na hora.
+    """
+    row_id = f"{notebook_id}_{group_id}"
+    try:
+        documents.write(
+            "notebook_groups",
+            row_id,
+            {
+                "notebook_id": str(notebook_id),
+                "group_id": str(group_id),
+                "role": role,
+                "created_at": documents.now(),
+            },
+            owner_id=None,
+        )
+    except Conflict:
+        documents.change("notebook_groups", row_id, {"role": role}, owner_id=None)
     touch_notebook(db, notebook_id)
 
 

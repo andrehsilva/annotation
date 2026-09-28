@@ -1,11 +1,13 @@
-import { GraphIcon, NoteBlank, Plus, Trash } from "@phosphor-icons/react";
+import { GraphIcon, NoteBlank, Plus, Trash, UsersThree } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER, relativeTime } from "../lib/format";
+import { KIND_LABELS, KIND_ORDER, SHARE_ROLE_LABELS, relativeTime } from "../lib/format";
 import type { Notebook, Tag, TagUsage } from "../lib/types";
 import { RelationsModal } from "./RelationsModal";
+import { ShareModal } from "./ShareModal";
 import { TagRow } from "./TagRow";
+import type { ToastKind } from "./ToastStack";
 import { EmptyState } from "./ui";
 
 interface NotebookViewProps {
@@ -20,6 +22,8 @@ interface NotebookViewProps {
   onDelete: () => void;
   onToggleTag: (tagId: number, attached: boolean) => void;
   onOpenNotebook: (id: number) => void;
+  onNotify: (message: string, kind?: ToastKind) => void;
+  onError: (error: unknown) => void;
 }
 
 export function NotebookView({
@@ -33,13 +37,20 @@ export function NotebookView({
   onDelete,
   onToggleTag,
   onOpenNotebook,
+  onNotify,
+  onError,
 }: NotebookViewProps) {
   const [title, setTitle] = useState(notebook.title);
   const [description, setDescription] = useState(notebook.description);
   const [draft, setDraft] = useState("");
   const [relationsOpen, setRelationsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const captureRef = useRef<HTMLInputElement | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  // O caderno pode ser de outra conta (chegou por grupo): o backend recusa renomear/apagar para quem
+  // não é dono, e recusa escrever para quem só lê — a tela não oferece o que a rota nega.
+  const isOwner = notebook.role === "owner";
+  const canWrite = notebook.role !== "viewer";
 
   useEffect(() => {
     setTitle(notebook.title);
@@ -90,21 +101,24 @@ export function NotebookView({
     <div className="view">
       <header className="nb-head">
         <input
-          className="nb-title-input"
+          className={isOwner ? "nb-title-input" : "nb-title-input is-readonly"}
           value={title}
+          readOnly={!isOwner}
           onChange={(event) => setTitle(event.target.value)}
           onBlur={() => title.trim() && title !== notebook.title && onRename({ title: title.trim() })}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}
           aria-label="Título do caderno"
+          title={isOwner ? undefined : "Só o dono renomeia o caderno"}
         />
         <textarea
           ref={descriptionRef}
-          className="nb-desc-input"
+          className={isOwner ? "nb-desc-input" : "nb-desc-input is-readonly"}
           value={description}
           placeholder="Descrição curta deste caderno"
           rows={1}
+          readOnly={!isOwner}
           onChange={(event) => setDescription(event.target.value)}
           onBlur={() =>
             description !== notebook.description && onRename({ description: description.trim() })
@@ -117,10 +131,20 @@ export function NotebookView({
             all={tags}
             onCreate={onCreateTag}
             onToggle={(tag, attached) => onToggleTag(tag.id, attached)}
+            readOnly={!canWrite}
           />
           <span className="meta-row">
             <span>{notebook.notes_count} notas</span>
             <span>atualizado {relativeTime(notebook.updated_at)}</span>
+            {notebook.shared && (
+              <span
+                className="tag-chip is-shared"
+                title={`Caderno de ${notebook.owner_name || "outra conta"}`}
+              >
+                <UsersThree size={11} weight="bold" />
+                {notebook.owner_name || "outra conta"} · {SHARE_ROLE_LABELS[notebook.role]}
+              </span>
+            )}
           </span>
         </div>
 
@@ -140,6 +164,15 @@ export function NotebookView({
             <button
               type="button"
               className="btn btn-ghost btn-compact"
+              onClick={() => setShareOpen(true)}
+              title={isOwner ? "Compartilhar com um grupo" : "Quem alcança este caderno"}
+            >
+              <UsersThree size={15} />
+              Compartilhar
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
               onClick={() => setRelationsOpen(true)}
               title="Cadernos que estas notas alcançam"
             >
@@ -149,41 +182,45 @@ export function NotebookView({
                 <span className="pill-count">{notebook.relations_count}</span>
               )}
             </button>
-            <button
-              type="button"
-              className="icon-btn is-danger"
-              onClick={onDelete}
-              title="Apagar caderno"
-              aria-label="Apagar caderno"
-            >
-              <Trash size={15} />
-            </button>
+            {isOwner && (
+              <button
+                type="button"
+                className="icon-btn is-danger"
+                onClick={onDelete}
+                title="Apagar caderno"
+                aria-label="Apagar caderno"
+              >
+                <Trash size={15} />
+              </button>
+            )}
           </span>
         </div>
       </header>
 
-      <div className="quick-capture">
-        <input
-          ref={captureRef}
-          className="input quick-capture-input"
-          value={draft}
-          placeholder="Nome da nota... (Enter cria e já abre para escrever)"
-          maxLength={200}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              submitDraft();
-            }
-            if (event.key === "Escape") setDraft("");
-          }}
-          aria-label="Nome da nota nova"
-        />
-        <button type="button" className="btn btn-primary" onClick={submitDraft}>
-          <Plus size={15} weight="bold" />
-          Nova nota
-        </button>
-      </div>
+      {canWrite && (
+        <div className="quick-capture">
+          <input
+            ref={captureRef}
+            className="input quick-capture-input"
+            value={draft}
+            placeholder="Nome da nota... (Enter cria e já abre para escrever)"
+            maxLength={200}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitDraft();
+              }
+              if (event.key === "Escape") setDraft("");
+            }}
+            aria-label="Nome da nota nova"
+          />
+          <button type="button" className="btn btn-primary" onClick={submitDraft}>
+            <Plus size={15} weight="bold" />
+            Nova nota
+          </button>
+        </div>
+      )}
 
       <section className="note-list">
         {notebook.notes.length === 0 ? (
@@ -212,14 +249,16 @@ export function NotebookView({
                   <span className="note-card-date">{relativeTime(note.updated_at)}</span>
                 </span>
               </button>
-              <button
-                type="button"
-                className="icon-btn is-tiny"
-                onClick={() => onDeleteNote(note.id)}
-                aria-label="Apagar nota"
-              >
-                <Trash size={13} />
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  className="icon-btn is-tiny"
+                  onClick={() => onDeleteNote(note.id)}
+                  aria-label="Apagar nota"
+                >
+                  <Trash size={13} />
+                </button>
+              )}
             </article>
           ))
         )}
@@ -237,6 +276,15 @@ export function NotebookView({
           notebook={notebook}
           onOpenNotebook={onOpenNotebook}
           onClose={() => setRelationsOpen(false)}
+        />
+      )}
+
+      {shareOpen && (
+        <ShareModal
+          notebook={notebook}
+          onClose={() => setShareOpen(false)}
+          onError={onError}
+          onNotify={onNotify}
         />
       )}
     </div>

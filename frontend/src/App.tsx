@@ -577,6 +577,8 @@ export default function App() {
           onDelete={() => deleteNotebook(notebook.id)}
           onToggleTag={(tagId, attached) => void toggleNotebookTag(notebook.id, tagId, attached)}
           onOpenNotebook={(id) => void openNotebook(id)}
+          onNotify={notify}
+          onError={report}
         />
       );
     }

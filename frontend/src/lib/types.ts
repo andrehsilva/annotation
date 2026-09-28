@@ -135,6 +135,12 @@ export interface NotebookSummary {
   counts: BlockCounts;
   /** How many other notebooks this one reaches through its notes. */
   relations_count: number;
+  /** O papel de quem pediu: o caderno pode ser de outra conta, alcançado por grupo. */
+  role: ShareRole;
+  owner_id: number;
+  owner_name: string;
+  /** `role !== "owner"`: o caderno é de outra conta e chegou aqui por grupo. */
+  shared: boolean;
 }
 
 export interface Notebook extends NotebookSummary {
@@ -193,6 +199,48 @@ export interface DriveStatus {
 }
 
 export type Role = "admin" | "user";
+
+/** Papel de uma conta dentro de um caderno: quem só lê, quem escreve, e o dono. */
+export type ShareRole = "owner" | "editor" | "viewer";
+
+/** Grupo de contas — o público do compartilhamento, criado e mantido pelo admin. */
+export interface Group {
+  id: number;
+  name: string;
+  created_at: string;
+  members: number;
+}
+
+export interface GroupDetail extends Group {
+  member_ids: number[];
+}
+
+/** Quem alcança um caderno, com o papel efetivo e os grupos que o trouxeram. */
+export interface NotebookMember {
+  user_id: number;
+  display_name: string;
+  email: string;
+  role: ShareRole;
+  owner: boolean;
+  groups: string[];
+}
+
+/** Um grupo com que o caderno está compartilhado: o papel vale para todo mundo dele. */
+export interface NotebookGroupShare {
+  group_id: number;
+  name: string;
+  role: "editor" | "viewer";
+  members: number;
+}
+
+/** O painel de compartilhar: quem alcança, com quais grupos, e o que eu ainda posso escolher. */
+export interface NotebookSharing {
+  role: ShareRole;
+  can_share: boolean;
+  members: NotebookMember[];
+  groups: NotebookGroupShare[];
+  available: Group[];
+}
 
 /** The account behind the session cookie. */
 export interface User {

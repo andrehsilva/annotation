@@ -2670,3 +2670,148 @@ iframe.element-media {
 .admin-reset-input {
   width: 140px;
 }
+
+/* --- Compartilhamento: as abas do admin, os grupos e o painel do caderno --- */
+
+.seg-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+}
+
+.seg-tab {
+  padding: 5px 14px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.seg-tab:hover {
+  color: var(--text);
+}
+
+.seg-tab.is-active {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.member-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.member-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-mail {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.member-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.role-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.role-chip.is-owner {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.share-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.share-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.share-form .input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.share-role {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* O caderno que chegou de outra conta: mesmo chip de tag, com o nome de quem manda nele. */
+.tag-chip.is-shared {
+  border-color: var(--primary);
+  color: var(--primary);
+  opacity: 1;
+  cursor: default;
+}
+
+.nb-item-shared {
+  display: inline-flex;
+  margin-right: auto;
+  color: var(--primary);
+}
+
+/* Sem ser dono, o título e a descrição são leitura: nada de cursor de edição. */
+.nb-title-input.is-readonly,
+.nb-desc-input.is-readonly {
+  cursor: default;
+}

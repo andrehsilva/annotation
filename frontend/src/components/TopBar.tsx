@@ -260,8 +260,8 @@ export function TopBar({
             type="button"
             className={view.kind === "admin" ? "topnav-chip is-active" : "topnav-chip"}
             onClick={onOpenAdmin}
-            title="Usuários"
-            aria-label="Usuários"
+            title="Admin: usuários e grupos"
+            aria-label="Admin"
             aria-pressed={view.kind === "admin"}
           >
             <Users size={15} weight="bold" />

@@ -1,7 +1,14 @@
-import type { Block, BlockType, NotebookSummary } from "./types";
+import type { Block, BlockType, NotebookSummary, ShareRole } from "./types";
 
 /** Alt+Space walks this order. */
 export const KIND_ORDER: BlockType[] = ["text", "code", "url", "image", "video", "pdf"];
+
+/** O papel de uma conta dentro de um caderno, como a tela o chama. */
+export const SHARE_ROLE_LABELS: Record<ShareRole, string> = {
+  owner: "dono",
+  editor: "editor",
+  viewer: "leitor",
+};
 
 export const KIND_LABELS: Record<BlockType, string> = {
   text: "texto",

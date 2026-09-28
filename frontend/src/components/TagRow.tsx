@@ -8,10 +8,12 @@ interface TagRowProps {
   all: TagUsage[];
   onToggle: (tag: Tag, attached: boolean) => void;
   onCreate: (name: string) => Promise<Tag | null>;
+  /** Num caderno de que só se lê (papel `viewer`), a linha vira só os chips. */
+  readOnly?: boolean;
 }
 
 /** Chips for the tags already applied, plus an inline "add" input with suggestions. */
-export function TagRow({ attached, all, onToggle, onCreate }: TagRowProps) {
+export function TagRow({ attached, all, onToggle, onCreate, readOnly = false }: TagRowProps) {
   const [draft, setDraft] = useState("");
   const attachedIds = new Set(attached.map((tag) => tag.id));
   const suggestions = all.filter((tag) => !attachedIds.has(tag.id));
@@ -28,6 +30,22 @@ export function TagRow({ attached, all, onToggle, onCreate }: TagRowProps) {
     const created = await onCreate(name);
     if (created) onToggle(created, false);
   };
+
+  if (readOnly) {
+    return (
+      <div className="tag-row">
+        {attached.length === 0 ? (
+          <span className="panel-hint">sem tags</span>
+        ) : (
+          attached.map((tag) => (
+            <span className="tag-chip is-attached" key={tag.id}>
+              {tag.name}
+            </span>
+          ))
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="tag-row">

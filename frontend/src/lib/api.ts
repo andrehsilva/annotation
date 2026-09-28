@@ -5,11 +5,14 @@ import type {
   BlockType,
   DriveStatus,
   EventFeed,
+  Group,
+  GroupDetail,
   MediaUpload,
   Note,
   NoteRelated,
   NoteSummary,
   Notebook,
+  NotebookSharing,
   NotebookSummary,
   RelationEdge,
   Role,
@@ -80,6 +83,29 @@ export const api = {
   adminResetPassword: (id: number, password: string) =>
     request<void>(`/api/admin/users/${id}/password`, { method: "POST", ...json({ password }) }),
   adminDeleteUser: (id: number) => request<void>(`/api/admin/users/${id}`, { method: "DELETE" }),
+
+  adminGroups: () => request<Group[]>("/api/admin/groups"),
+  adminCreateGroup: (name: string) =>
+    request<Group>("/api/admin/groups", { method: "POST", ...json({ name }) }),
+  adminGroup: (id: number) => request<GroupDetail>(`/api/admin/groups/${id}`),
+  adminRenameGroup: (id: number, name: string) =>
+    request<Group>(`/api/admin/groups/${id}`, { method: "PATCH", ...json({ name }) }),
+  adminDeleteGroup: (id: number) => request<void>(`/api/admin/groups/${id}`, { method: "DELETE" }),
+  adminAddGroupMember: (groupId: number, userId: number) =>
+    request<void>(`/api/admin/groups/${groupId}/members/${userId}`, { method: "PUT" }),
+  adminRemoveGroupMember: (groupId: number, userId: number) =>
+    request<void>(`/api/admin/groups/${groupId}/members/${userId}`, { method: "DELETE" }),
+
+  /** Os grupos de que a conta participa: é a lista que o painel de compartilhar oferece. */
+  myGroups: () => request<Group[]>("/api/groups"),
+  notebookSharing: (id: number) => request<NotebookSharing>(`/api/notebooks/${id}/members`),
+  shareNotebook: (id: number, groupId: number, role: "editor" | "viewer") =>
+    request<NotebookSharing>(`/api/notebooks/${id}/groups/${groupId}`, {
+      method: "POST",
+      ...json({ role }),
+    }),
+  unshareNotebook: (id: number, groupId: number) =>
+    request<NotebookSharing>(`/api/notebooks/${id}/groups/${groupId}`, { method: "DELETE" }),
 
   listNotebooks: () => request<NotebookSummary[]>("/api/notebooks"),
   getNotebook: (id: number) => request<Notebook>(`/api/notebooks/${id}`),
