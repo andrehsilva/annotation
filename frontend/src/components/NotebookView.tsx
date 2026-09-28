@@ -162,15 +162,17 @@ export function NotebookView({
             })}
           </span>
           <span className="nb-toolbar-actions">
-            <button
-              type="button"
-              className="btn btn-ghost btn-compact"
-              onClick={() => setShareOpen(true)}
-              title={isOwner ? "Compartilhar com um grupo" : "Quem alcança este caderno"}
-            >
-              <UsersThree size={15} />
-              Compartilhar
-            </button>
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-compact"
+                onClick={() => setShareOpen(true)}
+                title="Compartilhar com um grupo"
+              >
+                <UsersThree size={15} />
+                Compartilhar
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-ghost btn-compact"
@@ -280,7 +282,7 @@ export function NotebookView({
         />
       )}
 
-      {shareOpen && (
+      {shareOpen && isOwner && (
         <ShareModal
           notebook={notebook}
           onClose={() => setShareOpen(false)}

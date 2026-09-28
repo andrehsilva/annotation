@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, hostOf, vimeoId, youtubeId } from "../lib/format";
+import { KIND_LABELS, hostOf, isForeignBlock, vimeoId, youtubeId } from "../lib/format";
 import type { Block } from "../lib/types";
 import type { ImagePreview } from "./ImageModal";
 
@@ -108,6 +108,10 @@ export function BlockCard({
     }
   };
 
+  // Bloco de outra conta (caderno compartilhado): leitura. O backend recusa mudá-lo ou apagá-lo, e a
+  // tela não oferece o que a rota nega.
+  const foreign = isForeignBlock(block);
+
   const video = block.type === "video" ? block.url.trim() : "";
   const youtube = video ? youtubeId(video) : null;
   const vimeo = video && !youtube ? vimeoId(video) : null;
@@ -156,7 +160,12 @@ export function BlockCard({
           type="button"
           className={`block-kind is-${block.type}`}
           onClick={onKindClick}
-          title="Trocar o tipo (ou digite / em um bloco vazio)"
+          disabled={foreign}
+          title={
+            foreign
+              ? `Bloco de ${block.author}: só quem escreveu troca o tipo`
+              : "Trocar o tipo (ou digite / em um bloco vazio)"
+          }
         >
           <KindIcon size={13} weight="bold" />
           {KIND_LABELS[block.type]}
@@ -175,8 +184,10 @@ export function BlockCard({
               textareaRef.current = element;
               onRegisterRef(element);
             }}
-            className="block-textarea"
+            className={foreign ? "block-textarea is-readonly" : "block-textarea"}
             value={block.text}
+            readOnly={foreign}
+            title={foreign ? `Escrito por ${block.author} — só quem escreveu edita` : undefined}
             placeholder="Escreva o texto corrido. / troca o tipo do bloco, # cria tag, [[ cita uma nota."
             onChange={(event) =>
               onTextChange(event.target.value, event.target.selectionStart ?? Infinity)
@@ -192,6 +203,7 @@ export function BlockCard({
                 className="lang-input"
                 list="notai-languages"
                 value={block.language}
+                readOnly={foreign}
                 placeholder="linguagem"
                 onChange={(event) => onPatch({ language: event.target.value })}
               />
@@ -208,6 +220,7 @@ export function BlockCard({
               }}
               className="code-textarea"
               value={block.text}
+              readOnly={foreign}
               spellCheck={false}
               wrap="off"
               placeholder="// cole o snippet aqui"
@@ -218,7 +231,7 @@ export function BlockCard({
         )}
 
         {block.type === "url" &&
-          (active ? (
+          (active && !foreign ? (
             <div className="url-block">
               <input
                 ref={(element) => onRegisterRef(element)}
@@ -239,6 +252,8 @@ export function BlockCard({
               <span className="link-host">{hostOf(block.url)}</span>
               <span className="link-title">{block.caption || block.url}</span>
             </a>
+          ) : foreign ? (
+            <p className="panel-hint">Bloco de link vazio, de {block.author}.</p>
           ) : (
             <p className="panel-hint">
               <Paperclip size={13} /> Bloco de link vazio: clique para colar a url.
@@ -252,22 +267,26 @@ export function BlockCard({
                 ref={(element) => onRegisterRef(element)}
                 className="input"
                 value={block.url}
+                readOnly={foreign}
                 placeholder={block.type === "image" ? "cole a url da imagem" : "cole a url do vídeo"}
                 onChange={(event) => onPatch({ url: event.target.value })}
               />
-              <label className="btn btn-ghost btn-file">
-                <UploadSimple size={15} />
-                {uploading ? "enviando..." : "arquivo"}
-                <input
-                  type="file"
-                  accept={block.type === "image" ? "image/*" : "video/*"}
-                  onChange={(event) => void upload(event.target.files?.[0])}
-                />
-              </label>
+              {!foreign && (
+                <label className="btn btn-ghost btn-file">
+                  <UploadSimple size={15} />
+                  {uploading ? "enviando..." : "arquivo"}
+                  <input
+                    type="file"
+                    accept={block.type === "image" ? "image/*" : "video/*"}
+                    onChange={(event) => void upload(event.target.files?.[0])}
+                  />
+                </label>
+              )}
             </div>
             <input
               className="input"
               value={block.caption}
+              readOnly={foreign}
               placeholder="legenda"
               onChange={(event) => onPatch({ caption: event.target.value })}
             />
@@ -317,22 +336,26 @@ export function BlockCard({
                 ref={(element) => onRegisterRef(element)}
                 className="input"
                 value={block.url}
+                readOnly={foreign}
                 placeholder="cole a url do pdf"
                 onChange={(event) => onPatch({ url: event.target.value })}
               />
-              <label className="btn btn-ghost btn-file">
-                <UploadSimple size={15} />
-                {uploading ? "enviando..." : "arquivo"}
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(event) => void upload(event.target.files?.[0])}
-                />
-              </label>
+              {!foreign && (
+                <label className="btn btn-ghost btn-file">
+                  <UploadSimple size={15} />
+                  {uploading ? "enviando..." : "arquivo"}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(event) => void upload(event.target.files?.[0])}
+                  />
+                </label>
+              )}
             </div>
             <input
               className="input"
               value={block.caption}
+              readOnly={foreign}
               placeholder="legenda"
               onChange={(event) => onPatch({ caption: event.target.value })}
             />
@@ -360,17 +383,19 @@ export function BlockCard({
         )}
       </div>
 
-      <div className="block-tools">
-        <button
-          type="button"
-          className="icon-btn is-tiny"
-          onClick={onDelete}
-          aria-label="Apagar bloco"
-          title="Apagar bloco"
-        >
-          <Trash size={13} />
-        </button>
-      </div>
+      {!foreign && (
+        <div className="block-tools">
+          <button
+            type="button"
+            className="icon-btn is-tiny"
+            onClick={onDelete}
+            aria-label="Apagar bloco"
+            title="Apagar bloco"
+          >
+            <Trash size={13} />
+          </button>
+        </div>
+      )}
     </article>
   );
 }

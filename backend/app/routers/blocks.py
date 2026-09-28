@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from .. import acl, deps, events, links, services
 from ..schemas import BlockListItem, BlockOut, BlockPatch, BlockType
@@ -8,6 +8,16 @@ from ..store import documents, store
 from ..store.client import Store, equal
 
 router = APIRouter(prefix="/api/blocks", tags=["blocks"])
+
+# `editor` escreve à vontade no caderno compartilhado, mas o bloco de outra conta é leitura: o conteúdo
+# responde por quem o escreveu, e a mensagem diz o que fazer em vez de só recusar.
+NOT_THE_AUTHOR = "Só quem escreveu este bloco pode mudá-lo ou apagá-lo. Copie o trecho para um bloco seu."
+
+
+def _require_author(db: Store, user: documents.Row, block: documents.Row, notebook_id: int) -> None:
+    """O bloco é de quem pediu? (o papel no caderno não basta — ver a matriz em `acl.py`)"""
+    if not acl.owns_block(db.snapshot(user.id), user.id, block, notebook_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_THE_AUTHOR)
 
 
 def _blocks_of(db: Store, user_id: int, note_id: int) -> list[documents.Row]:
@@ -67,6 +77,7 @@ def update_block(
     block = deps.block_for(db, user, block_id)
     # o rótulo do evento sai antes da mutação, que logo abaixo mexe nos vínculos do bloco
     note = deps.note_for(db, user, block.note_id)
+    _require_author(db, user, block, note.notebook_id)
     note_title = note.title
     fields = payload.model_dump(exclude_unset=True)
     with store().transaction() as tx:
@@ -91,6 +102,7 @@ def delete_block(
     block = deps.block_for(db, user, block_id)
     note_id = block.note_id
     note = deps.note_for(db, user, note_id)
+    _require_author(db, user, block, note.notebook_id)
     note_title = note.title  # o bloco some, então o rótulo sai antes
     with store().transaction() as tx:
         db.delete_where("block_links", [equal("block_id", str(block_id))])

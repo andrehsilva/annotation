@@ -173,7 +173,10 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   as tags, o grafo e o Drive passam a mostrar só o que é daquela conta. A navegação (Cadernos, Notas,
   Tags, Relações) e, para o admin, **Usuários**, aparece no pipe da barra superior, ao lado dos
   **contadores por tipo de bloco** — os dois lados só com ícone + número (o nome aparece no hover),
-  somando todos os cadernos no caso dos tipos. Clicar num contador abre a lista achatada daquele tipo:
+  somando todos os cadernos no caso dos tipos. Quando a janela é estreita demais para a barra inteira,
+  o que não cabe vai para o menu **…** (contadores de tipo e, se preciso, também a navegação), de modo
+  que nada fique fora de alcance — antes os contadores simplesmente desapareciam. Clicar num contador
+  abre a lista achatada daquele tipo:
   sem agrupamento por caderno, o mais recente primeiro, e cada cartão mostra a origem
   (`caderno › nota`) e um botão **Abrir nota**.
 - No canto de baixo da coluna de conteúdo flutua o cluster de **ações rápidas**, que muda com a tela:
@@ -193,16 +196,20 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   Cada linha diz quem fez, o quê e em quê: “criou a nota «X»”, “marcou «Y» com a tag «ideias»”,
   “apagou o caderno «Z»”.
 - O chip com o próprio nome, à direita antes do botão do Drive, abre **Trocar senha** e **Sair**.
-- No cabeçalho do caderno, **Compartilhar** abre o painel de quem alcança aquele caderno: cada conta
-  com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Só o dono vê os controles — escolher
-  um grupo com "pode escrever" ou "só pode ler", trocar o papel de um grupo já compartilhado e
-  **Remover**. Os cadernos que chegaram de outra conta aparecem com um chip **Compartilhado por
+- No cabeçalho do caderno do **dono**, **Compartilhar** abre o painel de quem alcança aquele caderno:
+  cada conta com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Ali ele escolhe um grupo
+  com "pode escrever" ou "só pode ler", troca o papel de um grupo já compartilhado e **Remover**. O
+  botão não aparece para quem recebeu o caderno — nesse caso o chip já diz que ele é compartilhado. Os cadernos que chegaram de outra conta aparecem com um chip **Compartilhado por
   «dono» · «papel»** (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu
   não aparece: título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não
   há barra de nota nova, lixeira de nota nem edição de tag.
 - Em caderno compartilhado, **cada bloco que não é seu traz o nome de quem o escreveu** — embaixo do
   tipo, dentro da nota, e no pé do cartão da lista por tipo. Nos próprios blocos não aparece nome
   nenhum, e os blocos gravados antes desta coluna saem com o nome do dono do caderno.
+- **Bloco de outra conta é leitura.** Nem o dono do caderno edita ou apaga o bloco de um membro, e o
+  membro também não toca no do dono: o conteúdo responde por quem o escreveu (a API responde `403`).
+  Na tela, o bloco alheio fica sem textarea editável, sem troca de tipo, sem upload e sem lixeira; o
+  **tipo** continua servindo para criar um bloco novo, seu, logo depois.
 - Dentro da nota, o botão ao lado de **voltar** inverte a ordem dos blocos (mais novos primeiro); a
   faixa "continue escrevendo" e a linha de ícones/atalhos vão junto, de modo que o próximo bloco entra
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
@@ -357,8 +364,8 @@ Nenhuma das duas guarda conteúdo de nota.
 ## API
 
 Todas as rotas de `/api` (menos `login` e `health`) exigem o cookie de sessão; sem ele a resposta é
-`401`. Erros de permissão são `404` quando o recurso é de outra conta e `403` só quando a conta existe
-e o papel não permite (rotas de admin).
+`401`. Erros de permissão são `404` quando o recurso é de outra conta, `403` quando o recurso é alcançável
+mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 
 | Método | Rota | Uso |
 | --- | --- | --- |

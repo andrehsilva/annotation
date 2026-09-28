@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER, isBlank } from "../lib/format";
+import { KIND_LABELS, KIND_ORDER, isBlank, isForeignBlock } from "../lib/format";
 import type { Block, BlockType, Note, NoteRelated, NoteSummary, Tag, TagUsage } from "../lib/types";
 import { BlockCard } from "./BlockCard";
 import type { MentionToken } from "./BlockCard";
@@ -302,7 +302,9 @@ export function NoteEditor({
   const applyKind = async (block: Block, kind: BlockType) => {
     setKindMenuFor(null);
     setActiveId(block.id);
-    if (isBlank(block)) {
+    // Bloco de outra conta não se converte: o tipo dele é do autor, então o tipo escolhido vira um
+    // bloco novo, meu, logo depois.
+    if (isBlank(block) && !isForeignBlock(block)) {
       patch(block.id, { type: kind });
       setFocusId(block.id);
       return;
@@ -396,6 +398,9 @@ export function NoteEditor({
       return;
     }
 
+    // O bloco de outra conta é leitura: nem menu de tipo, nem a lixeira do Backspace mexem nele.
+    const mine = !isForeignBlock(active);
+
     // Ctrl+Shift+L: same menu, for cursor-in-the-middle-of-text cases.
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
       event.preventDefault();
@@ -405,7 +410,7 @@ export function NoteEditor({
       return;
     }
 
-    if (noModifier && blankField && event.key === "/") {
+    if (noModifier && blankField && mine && event.key === "/") {
       event.preventDefault();
       setPaletteFor(null);
       setActiveId(active.id);
@@ -413,7 +418,7 @@ export function NoteEditor({
       return;
     }
 
-    if (noModifier && blankField && event.key === "#") {
+    if (noModifier && blankField && mine && event.key === "#") {
       event.preventDefault();
       setKindMenuFor(null);
       setActiveId(active.id);
@@ -431,7 +436,7 @@ export function NoteEditor({
       }
     }
 
-    if (event.key === "Backspace" && insideBlock && blocksRef.current.length > 1 && isBlank(active)) {
+    if (event.key === "Backspace" && insideBlock && mine && blocksRef.current.length > 1 && isBlank(active)) {
       event.preventDefault();
       void remove(active.id);
     }

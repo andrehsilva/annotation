@@ -10,7 +10,8 @@ Matriz de papéis por operação (o `minimum` que cada rota passa para `deps.not
 | operação                                        | mínimo |
 | ----------------------------------------------- | ------ |
 | ler caderno, notas, blocos, tags, busca, grafo    | viewer |
-| criar/editar/apagar nota, bloco, vínculo e tag    | editor |
+| criar nota, bloco, vínculo e tag                  | editor |
+| editar/apagar um **bloco**                        | só quem o escreveu |
 | renomear/apagar o caderno e **compartilhar**      | owner  |
 
 Só o dono compartilha: ninguém amplia a audiência sem ele saber.
@@ -83,6 +84,18 @@ def role_for(db: Store, user_id: int, notebook_id: int) -> str | None:
 
 def is_owner(db: Store, user_id: int, notebook_id: int) -> bool:
     return direct_role(db, user_id, notebook_id) == "owner"
+
+
+def owns_block(photo: dict, user_id: int, block: Row, notebook_id: int) -> bool:
+    """O bloco é de quem está pedindo?
+
+    `editor` escreve o que quiser, mas **não mexe no que é dos outros**: o conteúdo responde por quem
+    o escreveu. Sem `created_by` (linha de antes da coluna) o autor é o dono do caderno, que era quem
+    escrevia.
+    """
+    if block.created_by:
+        return block.created_by == user_id
+    return role_in_photo(photo, notebook_id) == "owner"
 
 
 def readable_notebook_ids(db: Store, user_id: int) -> list[str]:

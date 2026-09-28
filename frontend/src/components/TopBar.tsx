@@ -1,4 +1,4 @@
-import { CloudArrowUp, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Notebook, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { CloudArrowUp, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Notebook, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,7 +7,10 @@ import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, KIND_ORDER } from "../lib/format";
 import { ActivityBell } from "./ActivityBell";
 import { Key } from "./ui";
-import type { EventFeed, Stats, User } from "../lib/types";
+import type { BlockType, EventFeed, Stats, User } from "../lib/types";
+
+/** O `gap` do `.topnav`: entra na conta de quanto cada chip ocupa na régua. */
+const NAV_GAP = 6;
 
 interface TopBarProps {
   view: View;
@@ -79,6 +82,98 @@ export function TopBar({
     };
   }, [menuOpen]);
 
+  // Cabeçalho estreito: a régua invisível (as mesmas peças fora da tela) diz a largura de cada grupo, e
+  // a conta decide o arranjo — tudo inline, só os contadores no menu "…", ou o menu com tudo.
+  const [layout, setLayout] = useState<"full" | "counters" | "menu">("full");
+  const [visibleKinds, setVisibleKinds] = useState(KIND_ORDER.length);
+  const [moreOpen, setMoreOpen] = useState(false);
+  /** Onde ancorar o menu: o popover é `fixed` porque o `.topnav` recorta o que passa dele. */
+  const [moreBox, setMoreBox] = useState<{ top: number; right: number } | null>(null);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+  const rulerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const ruler = rulerRef.current;
+    if (!nav || !ruler) return;
+    const measure = () => {
+      const [sectionsRuler, ...chips] = Array.from(ruler.children) as HTMLElement[];
+      const moreChip = chips.pop();
+      if (!sectionsRuler || !moreChip) return;
+      const sectionsWidth = sectionsRuler.getBoundingClientRect().width + NAV_GAP;
+      const moreWidth = moreChip.getBoundingClientRect().width + NAV_GAP;
+      const room = nav.clientWidth;
+      const widthOf = (chip: HTMLElement) => chip.getBoundingClientRect().width + NAV_GAP;
+      const total = sectionsWidth + chips.reduce((sum, chip) => sum + widthOf(chip), 0);
+      if (total <= room) {
+        setLayout("full");
+        setVisibleKinds(KIND_ORDER.length);
+        return;
+      }
+      const counterRoom = room - sectionsWidth - moreWidth;
+      let used = 0;
+      let count = 0;
+      for (const chip of chips) {
+        if (used + widthOf(chip) > counterRoom) break;
+        used += widthOf(chip);
+        count += 1;
+      }
+      // Nem as seções cabem: o menu leva tudo (é o que sobra do cabeçalho com a janela estreita).
+      setLayout(sectionsWidth + moreWidth > room ? "menu" : "counters");
+      setVisibleKinds(count);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [stats]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [moreOpen]);
+
+  /** Um contador por tipo. O mesmo chip serve a linha visível e a régua que mede a largura. */
+  const kindChip = (kind: BlockType, measurable = false) => {
+    const KindIcon = KIND_ICONS[kind];
+    const total = stats?.counts[kind] ?? 0;
+    const isActive = view.kind === "kind" && view.blockType === kind;
+    const classes = ["topnav-chip"];
+    if (isActive) classes.push("is-active");
+    if (total === 0) classes.push("is-zero");
+    return (
+      <button
+        type="button"
+        key={kind}
+        className={classes.join(" ")}
+        onClick={() => onNavigate({ kind: "kind", blockType: kind })}
+        title={`${total} ${KIND_LABELS[kind]} em todos os cadernos`}
+        aria-label={`Ver ${total} ${KIND_LABELS[kind]}`}
+        aria-hidden={measurable || undefined}
+        tabIndex={measurable ? -1 : undefined}
+      >
+        <KindIcon size={15} weight="bold" />
+        <span className="topnav-count">{total}</span>
+      </button>
+    );
+  };
+
   /** Icon + count, like the block counters after the pipe: the name lives in the tooltip. */
   const sections: {
     key: string;
@@ -122,6 +217,26 @@ export function TopBar({
     },
   ];
 
+  /** O chip de uma seção (Cadernos, Notas, Tags, Relações): igual na linha e na régua. */
+  const sectionChip = (section: (typeof sections)[number], measurable = false) => {
+    const SectionIcon = section.icon;
+    return (
+      <button
+        type="button"
+        key={section.key}
+        className={section.active ? "topnav-chip is-active" : "topnav-chip"}
+        onClick={section.onSelect}
+        title={section.label}
+        aria-label={section.label}
+        aria-hidden={measurable || undefined}
+        tabIndex={measurable ? -1 : undefined}
+      >
+        <SectionIcon size={15} weight="bold" />
+        {section.count !== undefined && <span className="topnav-count">{section.count}</span>}
+      </button>
+    );
+  };
+
   return (
     <header className="topbar">
       <button
@@ -141,50 +256,95 @@ export function TopBar({
         <span className="wordmark">AnotAI</span>
       </div>
 
-      <nav className="topnav">
-        {sections.map((section) => {
-          const SectionIcon = section.icon;
-          return (
+      <nav className="topnav" ref={navRef}>
+        {/* Régua: as mesmas peças, fora de vista, para medir sem depender do que está na tela. */}
+        <div className="topnav-ruler" ref={rulerRef} aria-hidden="true">
+          <div className="topnav-sections">{sections.map((section) => sectionChip(section, true))}</div>
+          {KIND_ORDER.map((kind) => kindChip(kind, true))}
+          <span className="topnav-chip">
+            <DotsThree size={16} weight="bold" />
+          </span>
+        </div>
+
+        {stats && layout !== "menu" && (
+          <div className="topnav-sections">
+            {sections.map((section) => sectionChip(section))}
+            <span className="topnav-pipe" aria-hidden="true">
+              |
+            </span>
+          </div>
+        )}
+
+        {stats && layout !== "menu" && KIND_ORDER.slice(0, visibleKinds).map((kind) => kindChip(kind))}
+
+        {stats && layout !== "full" && (
+          <div className="topnav-more" ref={moreRef}>
             <button
-              key={section.key}
               type="button"
-              className={section.active ? "topnav-chip is-active" : "topnav-chip"}
-              onClick={section.onSelect}
-              title={section.label}
-              aria-label={section.label}
+              className={moreOpen ? "topnav-chip is-active" : "topnav-chip"}
+              onClick={() => {
+                const button = moreRef.current?.querySelector("button");
+                if (!button) return;
+                const rect = button.getBoundingClientRect();
+                setMoreBox({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+                setMoreOpen((open) => !open);
+              }}
+              title="Mais no cabeçalho"
+              aria-label="Mais no cabeçalho"
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
             >
-              <SectionIcon size={15} weight="bold" />
-              {section.count !== undefined && (
-                <span className="topnav-count">{section.count}</span>
-              )}
+              <DotsThree size={16} weight="bold" />
             </button>
-          );
-        })}
-        <span className="topnav-pipe" aria-hidden="true">
-          |
-        </span>
-        {stats &&
-          KIND_ORDER.map((kind) => {
-            const KindIcon = KIND_ICONS[kind];
-            const total = stats.counts[kind];
-            const isActive = view.kind === "kind" && view.blockType === kind;
-            const classes = ["topnav-chip"];
-            if (isActive) classes.push("is-active");
-            if (total === 0) classes.push("is-zero");
-            return (
-              <button
-                type="button"
-                key={kind}
-                className={classes.join(" ")}
-                onClick={() => onNavigate({ kind: "kind", blockType: kind })}
-                title={`${total} ${KIND_LABELS[kind]} em todos os cadernos`}
-                aria-label={`Ver ${total} ${KIND_LABELS[kind]}`}
-              >
-                <KindIcon size={15} weight="bold" />
-                <span className="topnav-count">{total}</span>
-              </button>
-            );
-          })}
+            {moreOpen && moreBox && (
+              <div className="topnav-menu" role="menu" style={{ top: moreBox.top, right: moreBox.right }}>
+                {layout === "menu" &&
+                  sections.map((section) => {
+                    const SectionIcon = section.icon;
+                    return (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        key={section.key}
+                        className="topnav-menu-item"
+                        onClick={() => {
+                          setMoreOpen(false);
+                          section.onSelect();
+                        }}
+                      >
+                        <SectionIcon size={14} weight="bold" />
+                        {section.label}
+                        {section.count !== undefined && (
+                          <span className="topnav-count">{section.count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                {layout === "menu" && <span className="topnav-menu-sep" aria-hidden="true" />}
+                {KIND_ORDER.slice(layout === "menu" ? 0 : visibleKinds).map((kind) => {
+                  const KindIcon = KIND_ICONS[kind];
+                  const total = stats.counts[kind];
+                  return (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      key={kind}
+                      className="topnav-menu-item"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        onNavigate({ kind: "kind", blockType: kind });
+                      }}
+                    >
+                      <KindIcon size={14} weight="bold" />
+                      {KIND_LABELS[kind]}
+                      <span className="topnav-count">{total}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
       <div className="topbar-actions">

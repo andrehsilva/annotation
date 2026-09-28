@@ -221,14 +221,80 @@ textarea {
 .topnav {
   display: flex;
   align-items: center;
+  /* Cresce até o que sobra da barra (as ações ficam fixas à direita): é esta folga que deixa os
+     contadores na linha quando a janela é larga. Estreita, o menu "…" assume. */
+  flex: 1 1 auto;
   gap: 6px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: hidden;
 }
 
-.topnav::-webkit-scrollbar {
-  display: none;
+/* As seções (Cadernos, Notas, Tags, Relações) andam juntas: o menu dos contadores mede o que sobra
+   depois delas, então este grupo não encolhe. */
+.topnav-sections {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 6px;
+}
+
+/* Régua do menu dinâmico: os contadores invisíveis, só para medir a largura de cada um. */
+.topnav-ruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 6px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.topnav-more {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.topnav-menu {
+  /* `fixed`: dentro do `.topnav` (que recorta) o popover seria clipado pelo cabeçalho. */
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.topnav-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topnav-menu-item:hover {
+  background: var(--surface-raised);
+  color: var(--primary);
+}
+
+.topnav-menu-item .topnav-count {
+  margin-left: auto;
+}
+
+.topnav-menu-sep {
+  margin: 4px 6px;
+  border-top: 1px solid var(--border);
 }
 
 .topnav-pipe {

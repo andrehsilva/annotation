@@ -36,6 +36,14 @@ export function isBlank(block: Pick<Block, "text" | "url" | "caption">): boolean
   return !block.text.trim() && !block.url.trim() && !block.caption.trim();
 }
 
+/**
+ * O bloco é de outra conta (caderno compartilhado). A API só deixa quem escreveu mudá-lo ou
+ * apagá-lo, então a tela desliga a edição: `author` vem preenchido apenas para bloco alheio.
+ */
+export function isForeignBlock(block: Pick<Block, "author">): boolean {
+  return block.author !== "";
+}
+
 /** The sidebar's filter, shared with the tag shortcut: title, description or an attached tag. */
 export function notebookMatches(notebook: NotebookSummary, needle: string): boolean {
   const term = needle.trim().toLowerCase();
