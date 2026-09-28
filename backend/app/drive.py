@@ -2,17 +2,21 @@
 
 `drive.file` only sees files this app created, so the export owns everything under `NotAI/` and
 never touches the rest of the user's Drive.
+
+A conexão é em dois passos, porque o servidor não tem navegador: `auth_url` devolve a tela de
+consentimento para o usuário abrir, e `finish` troca o `code` que ele cola de volta pelo token.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 
 from .config import DATA_DIR
@@ -95,32 +99,78 @@ def save_client_file(user_id: int, raw: bytes) -> None:
     client_file(user_id).write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-# Sem teto, `run_local_server` espera para sempre: cada chamada presa segura um worker do threadpool
-# do uvicorn (40 no total) e a API inteira para de responder. Medido na biblioteca instalada.
-CONNECT_TIMEOUT = 180
+# O retorno do OAuth é loopback (`http://localhost:<porta>/`), o único `redirect_uri` que um cliente
+# "Aplicativo para computador" aceita. Ninguém escuta nessa porta do lado do usuário — nem aqui (o app
+# roda num contêiner) —, então o navegador erra ao voltar e é a **barra de endereço** que guarda o
+# `code`: é ela que a tela pede de volta. O fluxo antigo (`run_local_server`) só funcionava com
+# navegador na mesma máquina do servidor, e por isso a conexão quebrava em produção.
+LOOPBACK = "http://localhost:8765/"
+AUTHORIZE_TTL = 15 * 60  # a janela em que o `state` entregue à tela ainda vale
 
 
-class ConnectTimeout(Exception):
-    """A autorização não voltou dentro do prazo."""
+class BadCallback(Exception):
+    """O que foi colado não é um retorno de autorização, ou o Google recusou o código."""
 
 
-def connect(user_id: int) -> None:
-    """Open the browser and block until the loopback redirect carries the authorization code."""
-    flow = InstalledAppFlow.from_client_secrets_file(str(client_file(user_id)), SCOPES)
+class ExchangeUnavailable(Exception):
+    """A troca do código pelo token não chegou ao Google."""
+
+
+def _flow(user_id: int) -> InstalledAppFlow:
+    """O mesmo `redirect_uri` na autorização e na troca: o Google confere que são iguais."""
+    return InstalledAppFlow.from_client_secrets_file(
+        str(client_file(user_id)), SCOPES, redirect_uri=LOOPBACK
+    )
+
+
+def auth_url(user_id: int, state: str) -> tuple[str, str]:
+    """A URL de consentimento e o `code_verifier` (PKCE) que ela embutiu.
+
+    O PKCE é gerado por tentativa e a troca acontece noutra chamada, com outro objeto de flow: sem
+    guardar o verifier aqui, o Google recusaria a troca por `code_challenge` não bater. `offline` com
+    `prompt=consent` é o que garante o `refresh_token` — sem ele o export morreria em uma hora.
+    """
+    flow = _flow(user_id)
+    url, _ = flow.authorization_url(access_type="offline", prompt="consent", state=state)
+    return url, flow.code_verifier
+
+
+def parse_callback(value: str) -> tuple[str, str]:
+    """`(code, state)` do que o usuário colou: a URL de retorno inteira ou só o código."""
+    text = value.strip()
+    if not text:
+        raise BadCallback("Cole a URL da página de retorno (ou só o código).")
+    if not text.startswith("http"):
+        return text, ""
+    query = parse_qs(urlparse(text).query)
+    refused = (query.get("error") or [""])[0]
+    if refused:
+        raise BadCallback(f"O Google recusou a autorização: {refused}")
+    code = (query.get("code") or [""])[0]
+    if not code:
+        raise BadCallback("Essa URL é a da tela de autorização, não a do retorno com o código.")
+    return code, (query.get("state") or [""])[0]
+
+
+def finish(user_id: int, callback: str, state: str, verifier: str) -> None:
+    """Troca o `code` colado pelo token e grava o token desta conta.
+
+    O `state` só é conferido quando veio junto: o `code` já é casado com o `client_id` desta conta (a
+    troca usa o secret dela), então quem não tem o arquivo do cliente não consegue forjar um.
+    """
+    code, got = parse_callback(callback)
+    if got and got != state:
+        raise BadCallback("Este retorno é de outra tentativa de conexão. Comece de novo.")
+    flow = _flow(user_id)
+    flow.code_verifier = verifier  # o PKCE é da tentativa que gerou a URL, não deste objeto
     try:
-        creds = flow.run_local_server(
-            host="127.0.0.1",
-            port=0,
-            open_browser=True,
-            success_message="Pode fechar esta aba e voltar ao AnotAI.",
-            timeout_seconds=CONNECT_TIMEOUT,
-        )
-    except WSGITimeoutError as error:
-        raise ConnectTimeout(
-            f"A autorização não chegou em {CONNECT_TIMEOUT}s. Tente de novo."
-        ) from error
+        flow.fetch_token(code=code)
+    except (TransportError, OSError) as error:
+        raise ExchangeUnavailable(str(error)) from error
+    except Exception as error:  # noqa: BLE001 — a recusa vem do oauthlib ou do requests
+        raise BadCallback(f"O Google recusou o código ({error})") from error
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    token_file(user_id).write_text(creds.to_json(), encoding="utf-8")
+    token_file(user_id).write_text(flow.credentials.to_json(), encoding="utf-8")
 
 
 def disconnect(user_id: int) -> None:

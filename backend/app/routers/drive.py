@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import secrets
 import threading
+import time
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from google.auth.exceptions import RefreshError, TransportError
@@ -10,36 +12,28 @@ from googleapiclient.errors import HttpError
 
 from .. import deps, drive, sync
 from ..deps import get_db
-from ..schemas import DriveSettings, DriveStatus, SyncSummary
+from ..schemas import DriveCallbackIn, DriveConnectOut, DriveSettings, DriveStatus, SyncSummary
 from ..store import Store
 from ..store.documents import Row
 
 router = APIRouter(prefix="/api/drive", tags=["drive"])
 
-# O fluxo OAuth bloqueia o worker até o navegador voltar (ou até o timeout de `drive.CONNECT_TIMEOUT`):
-# sem estes dois limites, uma conta só segura o processo inteiro. Dois fluxos simultâneos bastam para
-# o uso real — conectar é um passo único de configuração.
-CONNECT_SLOTS = threading.BoundedSemaphore(2)
-CONNECTING: set[int] = set()
-CONNECTING_LOCK = threading.Lock()
+# O `state` e o `code_verifier` (PKCE) entregues a cada conta, para conferir o que volta colado na
+# tela. Vivem no processo (é o mesmo que atende a tela) e valem por `drive.AUTHORIZE_TTL`: passou
+# disso, a conexão é recomeçada.
+PENDING: dict[int, tuple[str, str, float]] = {}
+PENDING_LOCK = threading.Lock()
 
 
-def _claim_connect_slot(user_id: int) -> None:
-    with CONNECTING_LOCK:
-        if user_id in CONNECTING:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Já existe uma conexão em andamento.")
-        if not CONNECT_SLOTS.acquire(blocking=False):
-            raise HTTPException(
-                status.HTTP_429_TOO_MANY_REQUESTS,
-                "Muitas conexões em andamento. Tente de novo em instantes.",
-            )
-        CONNECTING.add(user_id)
-
-
-def _release_connect_slot(user_id: int) -> None:
-    with CONNECTING_LOCK:
-        CONNECTING.discard(user_id)
-    CONNECT_SLOTS.release()
+def _pending(user_id: int) -> tuple[str, str]:
+    """`(state, code_verifier)` da tentativa em voo; sem ela, a conexão precisa recomeçar."""
+    with PENDING_LOCK:
+        entry = PENDING.get(user_id)
+    if entry is None or entry[2] < time.monotonic():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Comece de novo pelo botão “Conectar com o Google”."
+        )
+    return entry[0], entry[1]
 
 
 @router.get("/status", response_model=DriveStatus)
@@ -76,24 +70,37 @@ def upload_client_file(
     return sync.status(db, user.id)
 
 
-@router.post("/connect", response_model=DriveStatus)
-def connect(db: Store = Depends(get_db), user: Row = Depends(deps.current_user)) -> DriveStatus:
+@router.post("/connect", response_model=DriveConnectOut)
+def connect(db: Store = Depends(get_db), user: Row = Depends(deps.current_user)) -> DriveConnectOut:
+    """Devolve a URL de consentimento: quem abre é o navegador do usuário, não o servidor."""
     if not drive.has_client_file(user.id):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"Coloque o credentials.json em {drive.client_file(user.id)}",
         )
-    _claim_connect_slot(user.id)
+    state = secrets.token_urlsafe(16)
+    url, verifier = drive.auth_url(user.id, state)
+    with PENDING_LOCK:
+        PENDING[user.id] = (state, verifier, time.monotonic() + drive.AUTHORIZE_TTL)
+    return DriveConnectOut(url=url)
+
+
+@router.post("/connect/code", response_model=DriveStatus)
+def connect_code(
+    payload: DriveCallbackIn,
+    db: Store = Depends(get_db),
+    user: Row = Depends(deps.current_user),
+) -> DriveStatus:
+    """Fecha a conexão com o que o usuário colou de volta: a URL de retorno ou só o código."""
+    state, verifier = _pending(user.id)
     try:
-        drive.connect(user.id)
-    except drive.ConnectTimeout as error:
-        raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, str(error)) from error
-    except HttpError as error:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, sync.error_message(error)) from error
-    except ValueError as error:  # client file that is not a "Desktop app" secret
+        drive.finish(user.id, payload.callback, state, verifier)
+    except drive.BadCallback as error:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from error
-    finally:
-        _release_connect_slot(user.id)
+    except drive.ExchangeUnavailable as error:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
+    with PENDING_LOCK:
+        PENDING.pop(user.id, None)  # conectado: nem o `state` nem o verifier servem mais
     return sync.status(db, user.id)
 
 

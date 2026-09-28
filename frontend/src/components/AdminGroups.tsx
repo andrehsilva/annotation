@@ -261,7 +261,8 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
       {openGroup && (
         <section className="panel">
           <p className="panel-title">
-            <UsersThree size={14} weight="bold" /> Quem está em “{openGroup.name}”
+            <UsersThree size={14} weight="bold" />{" "}
+            <span>Quem está em “{openGroup.name}”</span>
           </p>
           {users === null || memberIds === null ? (
             <p className="panel-hint">Carregando contas...</p>

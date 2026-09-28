@@ -1093,17 +1093,35 @@ iframe.element-media {
   color: var(--text-muted);
 }
 
+/* Texto corrido, sem flex: com `display: flex` cada trecho entre tags vira um item anônimo e a dica
+   de várias linhas se parte em colunas (visto na tela do Drive). O ícone, quando existe, fica na
+   própria linha do texto. */
 .panel-hint {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   margin: 0;
   color: var(--text-muted);
   font-size: 12px;
 }
 
+.panel-hint svg {
+  margin-right: 3px;
+  vertical-align: -2px;
+}
+
 .panel-hint.is-error {
   color: var(--danger);
+}
+
+/* Colar o retorno da autorização: o campo ocupa a linha e o botão fecha a conexão. */
+.drive-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.drive-code .input {
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .drive-steps {

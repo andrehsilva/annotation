@@ -188,6 +188,11 @@ export interface SyncSummary {
   at: string;
 }
 
+/** A tela de consentimento do Google: a aba que a tela abre para o usuário autorizar. */
+export interface DriveConnect {
+  url: string;
+}
+
 export interface DriveStatus {
   connected: boolean;
   has_client_file: boolean;

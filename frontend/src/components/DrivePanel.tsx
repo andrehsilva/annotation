@@ -1,5 +1,6 @@
 import { CloudArrowUp, X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 import type { ConfirmRequest } from "./ConfirmDialog";
 import { api } from "../lib/api";
@@ -20,6 +21,9 @@ interface DrivePanelProps {
 /** Export to Drive: the credentials dance, the sync button and the last run, in one sheet. */
 export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }: DrivePanelProps) {
   const [busy, setBusy] = useState<Busy>(null);
+  /** A URL de consentimento entregue nesta sessão: fica à mão para reabrir a aba depois. */
+  const [authorizeUrl, setAuthorizeUrl] = useState<string | null>(null);
+  const [callback, setCallback] = useState("");
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -45,11 +49,33 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
       onChanged(null);
     });
 
-  const connect = () =>
+  /**
+   * A aba do Google abre já, ainda vazia: pedir a URL antes e só então abrir faria o navegador
+   * bloquear o popup (a abertura deixa de estar no clique). Se o pedido falhar, a aba é fechada.
+   */
+  const connect = () => {
+    const tab = window.open("", "_blank");
     run("connect", async () => {
-      await api.driveConnect();
+      try {
+        const next = await api.driveConnect();
+        setAuthorizeUrl(next.url);
+        if (tab) tab.location.href = next.url;
+      } catch (error) {
+        tab?.close();
+        throw error;
+      }
+    });
+  };
+
+  const finishConnect = (event: FormEvent) => {
+    event.preventDefault();
+    run("connect", async () => {
+      await api.driveConnectCode(callback.trim());
+      setCallback("");
+      setAuthorizeUrl(null);
       onChanged(null);
     });
+  };
 
   const syncNow = () => run("sync", async () => onChanged(await api.driveSync()));
 
@@ -150,10 +176,22 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
         ) : status.has_client_file ? (
           <>
             <p className="panel-hint">
-              O AnotAI cria a pasta <b>NotAI</b> no seu Drive (o nome da pasta não mudou), uma subpasta
-              por caderno e um arquivo
-              .md por nota. Nada é lido nem apagado no Drive.
+              O AnotAI cria a pasta <b>NotAI</b> no seu Drive (o nome da pasta não mudou), uma
+              subpasta por caderno e um arquivo .md por nota. Nada é lido nem apagado no Drive.
             </p>
+            <ol className="drive-steps">
+              <li>
+                Clique em <b>Conectar com o Google</b>: a tela de autorização abre em outra aba.
+              </li>
+              <li>Autorize com a conta do Drive que vai receber o backup.</li>
+              <li>
+                O Google devolve o navegador para <code>localhost:8765</code> e a página{" "}
+                <b>não abre</b> — esse endereço é o do seu computador, não o do servidor. No lugar
+                dela, copie a <b>URL inteira</b> da barra de endereço: é ela que traz o código da
+                autorização.
+              </li>
+              <li>Cole a URL aqui embaixo e clique em <b>Concluir conexão</b>.</li>
+            </ol>
             <div className="btn-row">
               <button
                 type="button"
@@ -161,14 +199,32 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
                 onClick={connect}
                 disabled={busy !== null}
               >
-                <CloudArrowUp size={15} weight="bold" /> Conectar com o Google
+                <CloudArrowUp size={15} weight="bold" />
+                {busy === "connect" ? "Abrindo..." : "Conectar com o Google"}
               </button>
+              {authorizeUrl && (
+                <a className="btn" href={authorizeUrl} target="_blank" rel="noreferrer">
+                  Reabrir a tela do Google
+                </a>
+              )}
             </div>
-            {busy === "connect" && (
-              <p className="panel-hint">
-                Autorize na janela do navegador que abriu. A página volta sozinha.
-              </p>
-            )}
+            <form className="drive-code" onSubmit={finishConnect}>
+              <input
+                className="input"
+                value={callback}
+                placeholder="cole a URL de retorno (localhost:8765/...)"
+                disabled={busy !== null}
+                onChange={(event) => setCallback(event.target.value)}
+                aria-label="URL de retorno da autorização"
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy !== null || callback.trim().length < 8}
+              >
+                Concluir conexão
+              </button>
+            </form>
           </>
         ) : (
           <>

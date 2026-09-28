@@ -339,6 +339,18 @@ class DriveSettings(BaseModel):
     auto_sync: bool
 
 
+class DriveConnectOut(BaseModel):
+    """A tela de consentimento do Google, que a tela abre numa aba nova."""
+
+    url: str
+
+
+class DriveCallbackIn(BaseModel):
+    """O que o usuário colou de volta: a URL da página de retorno ou só o código."""
+
+    callback: str = Field(min_length=8, max_length=8000)
+
+
 class EventOut(ORMModel):
     id: int
     action: str

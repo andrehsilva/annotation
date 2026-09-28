@@ -276,10 +276,13 @@ resumo, o erro mais recente, um botão **Sincronizar agora** e o liga/desliga do
 Para conectar (uma vez, ~2 min): criar um projeto no
 [Google Cloud Console](https://console.cloud.google.com/), ativar a **Google Drive API**, criar a
 tela de permissão OAuth (tipo **Externo**, com o seu e-mail em "Usuários de teste"), criar um ID de
-cliente do tipo **Aplicativo para computador** e baixar o JSON. O painel do app recebe esse JSON,
-abre o navegador para autorizar e guarda o token em `backend/data/` (pasta fora do git). No modo
-"Testes" do Google o refresh token expira em 7 dias: o app percebe, descarta o token e o painel volta
-a pedir a conexão.
+cliente do tipo **Aplicativo para computador** e baixar o JSON. O painel recebe esse JSON e a conexão
+é em **dois passos**, porque o servidor não tem navegador: **Conectar com o Google** devolve a tela de
+consentimento (abre em outra aba, com PKCE e `offline` para vir o `refresh_token`), e o Google devolve
+o navegador para `http://localhost:8765/…` — endereço do computador de quem autorizou, que não abre —
+de modo que o **passo final é colar de volta a URL inteira** da barra de endereço, que traz o `code`.
+O token fica em `backend/data/` (pasta fora do git). No modo "Testes" do Google o refresh token expira
+em 7 dias: o app percebe, descarta o token e o painel volta a pedir a conexão.
 
 ## Modelo de dados
 
@@ -385,7 +388,8 @@ e o papel não permite (rotas de admin).
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
 | `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
 | `POST` | `/api/drive/client-file` | recebe o JSON do cliente OAuth (multipart `file`) |
-| `POST` | `/api/drive/connect` | abre o navegador e espera a autorização (bloqueia até voltar) |
+| `POST` | `/api/drive/connect` | devolve a URL de consentimento do Google (a tela abre numa aba nova) |
+| `POST` | `/api/drive/connect/code` | troca pelo token o que o usuário colou de volta (a URL de retorno ou o `code`) |
 | `POST` | `/api/drive/disconnect` | esquece token e ids em cache; não toca em nada no Drive |
 | `PATCH` | `/api/drive/settings` | `{"auto_sync": true\|false}` |
 | `POST` | `/api/drive/sync` | exporta agora e devolve o resumo (`409` se não conectado ou já rodando) |

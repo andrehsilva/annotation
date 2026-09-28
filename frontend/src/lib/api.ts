@@ -3,6 +3,7 @@ import type {
   Block,
   BlockListItem,
   BlockType,
+  DriveConnect,
   DriveStatus,
   EventFeed,
   Group,
@@ -179,7 +180,9 @@ export const api = {
     body.append("file", file);
     return request<DriveStatus>("/api/drive/client-file", { method: "POST", body });
   },
-  driveConnect: () => request<DriveStatus>("/api/drive/connect", { method: "POST" }),
+  driveConnect: () => request<DriveConnect>("/api/drive/connect", { method: "POST" }),
+  driveConnectCode: (callback: string) =>
+    request<DriveStatus>("/api/drive/connect/code", { method: "POST", ...json({ callback }) }),
   driveDisconnect: () => request<void>("/api/drive/disconnect", { method: "POST" }),
   driveSync: () => request<SyncSummary>("/api/drive/sync", { method: "POST" }),
   driveSetAutoSync: (enabled: boolean) =>
