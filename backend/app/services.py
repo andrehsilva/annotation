@@ -220,6 +220,8 @@ def notebook_summary(
     tags: Iterable[documents.Row] = (),
     role: str = "owner",
     owner_name: str = "",
+    shared_groups: Iterable[str] = (),
+    shared_people: int = 0,
 ) -> NotebookSummary:
     """`relations_count` here is how many other notebooks this one reaches through its notes.
 
@@ -240,6 +242,8 @@ def notebook_summary(
         owner_id=notebook.owner_id,
         owner_name=owner_name,
         shared=role != "owner",
+        shared_groups=list(shared_groups),
+        shared_people=shared_people,
     )
 
 
@@ -250,18 +254,30 @@ def list_notebook_summaries(db: Store, user_id: int) -> list[NotebookSummary]:
     affinity = affinity_counts_by_notebook(db, user_id)
     tags = _tags_by(photo, "notebook_tags", "notebook_id")
     owners = _owner_names(db, photo)
-    return [
-        notebook_summary(
-            notebook,
-            notes.get(notebook.id, 0),
-            counts.get(notebook.id, {}),
-            affinity.get(notebook.id, 0),
-            tags.get(notebook.id, ()),
-            acl.role_in_photo(photo, notebook.id) or "viewer",
-            owners.get(notebook.owner_id, ""),
+    notebooks = sorted(photo["notebooks"], key=lambda row: (row.title, row.id))
+    # O papel custa uma varredura da foto por caderno e responde duas perguntas: qual é o papel aqui e
+    # de quais cadernos o compartilhamento de saída pode ser lido. Uma varredura, uma consulta em lote.
+    roles = {row.id: acl.role_in_photo(photo, row.id) or "viewer" for row in notebooks}
+    audience = acl.share_audience(
+        db, [row for row in notebooks if roles[row.id] == "owner"]
+    )
+    out = []
+    for notebook in notebooks:
+        groups, people = audience.get(notebook.id, ((), 0))
+        out.append(
+            notebook_summary(
+                notebook,
+                notes.get(notebook.id, 0),
+                counts.get(notebook.id, {}),
+                affinity.get(notebook.id, 0),
+                tags.get(notebook.id, ()),
+                roles[notebook.id],
+                owners.get(notebook.owner_id, ""),
+                groups,
+                people,
+            )
         )
-        for notebook in sorted(photo["notebooks"], key=lambda row: (row.title, row.id))
-    ]
+    return out
 
 
 def note_excerpt(note: documents.Row) -> str:
@@ -303,6 +319,11 @@ def notebook_detail(db: Store, user_id: int, notebook: documents.Row) -> Noteboo
     counts = _block_counts(photo["blocks"], {note.id: note.id for note in notes})
     affinity = notebook_affinity(db, user_id).get(notebook.id, [])
     tags = _tags_by(photo, "notebook_tags", "notebook_id")
+    role = acl.role_in_photo(photo, notebook.id) or "viewer"
+    # Só o dono tem público para fora; para os outros o caderno é de outra conta e a consulta nem sai.
+    groups, people = (
+        acl.share_audience(db, [notebook]).get(notebook.id, ((), 0)) if role == "owner" else ((), 0)
+    )
     return NotebookOut(
         **notebook_summary(
             notebook,
@@ -310,8 +331,10 @@ def notebook_detail(db: Store, user_id: int, notebook: documents.Row) -> Noteboo
             block_counts_by_notebook(db, user_id).get(notebook.id, {}),
             len(affinity),
             tags.get(notebook.id, ()),
-            acl.role_in_photo(photo, notebook.id) or "viewer",
+            role,
             _owner_names(db, photo).get(notebook.owner_id, ""),
+            groups,
+            people,
         ).model_dump(),
         notes=[note_summary(note, counts.get(note.id), notebook.title) for note in notes],
         affinity=affinity,

@@ -2,9 +2,10 @@ import { GraphIcon, NoteBlank, Plus, Trash, UsersThree } from "@phosphor-icons/r
 import { useEffect, useRef, useState } from "react";
 
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER, SHARE_ROLE_LABELS, relativeTime } from "../lib/format";
+import { KIND_LABELS, KIND_ORDER, relativeTime } from "../lib/format";
 import type { Notebook, Tag, TagUsage } from "../lib/types";
 import { RelationsModal } from "./RelationsModal";
+import { ShareBadge } from "./ShareBadge";
 import { ShareModal } from "./ShareModal";
 import { TagRow } from "./TagRow";
 import type { ToastKind } from "./ToastStack";
@@ -22,6 +23,8 @@ interface NotebookViewProps {
   onDelete: () => void;
   onToggleTag: (tagId: number, attached: boolean) => void;
   onOpenNotebook: (id: number) => void;
+  /** Compartilhar muda o caderno e a lista inteira: quem chamou recarrega os dois. */
+  onChanged: () => void;
   onNotify: (message: string, kind?: ToastKind) => void;
   onError: (error: unknown) => void;
 }
@@ -37,6 +40,7 @@ export function NotebookView({
   onDelete,
   onToggleTag,
   onOpenNotebook,
+  onChanged,
   onNotify,
   onError,
 }: NotebookViewProps) {
@@ -136,16 +140,7 @@ export function NotebookView({
           <span className="meta-row">
             <span>{notebook.notes_count} notas</span>
             <span>atualizado {relativeTime(notebook.updated_at)}</span>
-            {notebook.shared && (
-              <span
-                className="tag-chip is-shared"
-                title={`Compartilhado com você por ${notebook.owner_name || "outra conta"}`}
-              >
-                <UsersThree size={11} weight="bold" />
-                Compartilhado por {notebook.owner_name || "outra conta"} ·{" "}
-                {SHARE_ROLE_LABELS[notebook.role]}
-              </span>
-            )}
+            <ShareBadge notebook={notebook} />
           </span>
         </div>
 
@@ -286,6 +281,7 @@ export function NotebookView({
         <ShareModal
           notebook={notebook}
           onClose={() => setShareOpen(false)}
+          onChanged={onChanged}
           onError={onError}
           onNotify={onNotify}
         />

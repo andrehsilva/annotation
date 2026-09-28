@@ -1,9 +1,10 @@
-import { GraphIcon, NoteBlank, Plus, SidebarSimple, Tag as TagIcon, UsersThree } from "@phosphor-icons/react";
+import { GraphIcon, NoteBlank, Plus, SidebarSimple, Tag as TagIcon } from "@phosphor-icons/react";
 
 import type { View } from "../App";
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_ORDER, KIND_LABELS, SHARE_ROLE_LABELS, notebookMatches } from "../lib/format";
+import { KIND_ORDER, KIND_LABELS, notebookMatches } from "../lib/format";
 import type { NotebookSummary, Stats, TagUsage } from "../lib/types";
+import { ShareBadge } from "./ShareBadge";
 
 interface SidebarProps {
   notebooks: NotebookSummary[];
@@ -85,14 +86,7 @@ export function Sidebar({
           >
             <span className="nb-item-head">
               <span className="nb-item-title">{notebook.title}</span>
-              {notebook.shared && (
-                <span
-                  className="nb-item-shared"
-                  title={`Compartilhado por ${notebook.owner_name || "outra conta"} · ${SHARE_ROLE_LABELS[notebook.role]}`}
-                >
-                  <UsersThree size={12} weight="bold" />
-                </span>
-              )}
+              <ShareBadge notebook={notebook} compact />
               <span className="nb-item-notes" title={`${notebook.notes_count} notas`}>
                 <NoteBlank size={13} />
                 {notebook.notes_count}

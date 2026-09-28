@@ -223,6 +223,10 @@ class NotebookSummary(ORMModel):
     owner_id: int
     owner_name: str = ""
     shared: bool = False
+    # O outro lado do `shared`: o caderno é **desta** conta e está aberto para estes grupos, que levam
+    # `shared_people` contas até ele. É o que diz ao dono qual dos cadernos dele saiu daqui.
+    shared_groups: list[str] = []
+    shared_people: int = 0
 
 
 class NotebookOut(NotebookSummary):

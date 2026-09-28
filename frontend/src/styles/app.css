@@ -2905,6 +2905,10 @@ iframe.element-media {
   opacity: 1;
   cursor: default;
 }
+/* O chip de compartilhamento encosta no contador de notas ("… · 2 pessoas1 nota"): um respiro. */
+.note-card-notebook .tag-chip {
+  margin-right: 6px;
+}
 
 .nb-item-shared {
   display: inline-flex;

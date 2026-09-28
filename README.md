@@ -199,10 +199,13 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
 - No cabeçalho do caderno do **dono**, **Compartilhar** abre o painel de quem alcança aquele caderno:
   cada conta com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Ali ele escolhe um grupo
   com "pode escrever" ou "só pode ler", troca o papel de um grupo já compartilhado e **Remover**. O
-  botão não aparece para quem recebeu o caderno — nesse caso o chip já diz que ele é compartilhado. Os cadernos que chegaram de outra conta aparecem com um chip **Compartilhado por
-  «dono» · «papel»** (na lista lateral, na lista de cadernos e no cabeçalho), e neles o que não é seu
-  não aparece: título e descrição viram leitura, o caderno não se apaga e, para quem só lê, também não
-  há barra de nota nova, lixeira de nota nem edição de tag.
+  botão não aparece para quem recebeu o caderno — nesse caso o chip já diz que ele é compartilhado. O
+  chip vale nos **dois sentidos**, nas três listas onde um caderno aparece (barra lateral, lista de
+  cadernos e cabeçalho do caderno aberto): o que chegou de outra conta diz **Compartilhado por
+  «dono» · «papel»**, e o meu que saiu daqui diz **Compartilhado com «grupos» · «N pessoas»** — sem
+  ele o dono não tinha como saber, olhando a lista, qual dos cadernos dele estava compartilhado. Nos
+  cadernos de outra conta o que não é seu não aparece: título e descrição viram leitura, o caderno não
+  se apaga e, para quem só lê, também não há barra de nota nova, lixeira de nota nem edição de tag.
 - Em caderno compartilhado, **cada bloco que não é seu traz o nome de quem o escreveu** — embaixo do
   tipo, dentro da nota, e no pé do cartão da lista por tipo. Nos próprios blocos não aparece nome
   nenhum, e os blocos gravados antes desta coluna saem com o nome do dono do caderno.
@@ -324,7 +327,11 @@ todo id que chega pela URL passa por um loader que confere o papel e responde `4
 quem pediu. As rotas de compartilhar (`GET /api/groups`, `GET /api/notebooks/{id}/members`,
 `POST/DELETE /api/notebooks/{id}/groups/{group_id}`) e o CRUD de grupos do admin são o que a tela usa:
 **Compartilhar**, no cabeçalho do caderno, mostra quem alcança (com o papel e o grupo de cada um) e —
-para o dono — escolhe o grupo e o papel; a aba **Grupos** do admin monta os grupos.
+para o dono — escolhe o grupo e o papel; a aba **Grupos** do admin monta os grupos. O compartilhamento
+de **saída** não está na foto: ela carrega `notebook_groups` pelos grupos de quem pede, e o dono
+normalmente não está no grupo com quem compartilhou — quem responde "com quem este caderno está
+compartilhado?" é `acl.share_audience`, uma consulta em lote por caderno do dono, e é o que alimenta o
+chip **Compartilhado com «grupos» · «N pessoas»** da lista.
 
 `users` guarda e-mail (único, minúsculo), nome, `role` (`admin` ou `user`), `is_active` e o hash da
 senha — nunca a senha. `sessions` guarda o `sha256` do token do cookie, o dono e a validade; apagar a
@@ -379,7 +386,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `GET/POST` | `/api/admin/groups` | lista os grupos (nome e tamanho) / cria — quem compõe o grupo é o admin |
 | `GET/PATCH/DELETE` | `/api/admin/groups/{id}` | os ids de quem está no grupo / renomeia / apaga (leva junto os vínculos com cadernos) |
 | `PUT/DELETE` | `/api/admin/groups/{id}/members/{user_id}` | põe/tira alguém do grupo (idempotente) |
-| `GET/POST` | `/api/notebooks` | lista com contagens por tipo de bloco / cria (já com uma nota vazia) |
+| `GET/POST` | `/api/notebooks` | lista com contagens por tipo de bloco — cada item diz o papel de quem pediu, o dono e, nos cadernos dele, com que grupos o caderno está compartilhado / cria (já com uma nota vazia) |
 | `GET/PATCH/DELETE` | `/api/notebooks/{id}` | detalhe (notas, tags, afinidade derivada), renomear, apagar |
 | `POST/DELETE` | `/api/notebooks/{id}/tags/{tag_id}` | aplica/remove tag do caderno |
 | `GET` | `/api/groups` | os grupos de que a conta participa, para escolher com quem compartilhar |

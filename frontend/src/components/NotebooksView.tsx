@@ -1,8 +1,9 @@
-import { Notebook as NotebookIcon, Plus, UsersThree } from "@phosphor-icons/react";
+import { Notebook as NotebookIcon, Plus } from "@phosphor-icons/react";
 
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER, SHARE_ROLE_LABELS, relativeTime } from "../lib/format";
+import { KIND_LABELS, KIND_ORDER, relativeTime } from "../lib/format";
 import type { NotebookSummary } from "../lib/types";
+import { ShareBadge } from "./ShareBadge";
 import { EmptyState } from "./ui";
 
 /**
@@ -58,16 +59,7 @@ export function NotebooksView({
                 </span>
                 <span className="note-card-foot">
                   <span className="note-card-notebook">
-                    {notebook.shared && (
-                      <span
-                        className="tag-chip is-shared"
-                        title={`Compartilhado com você por ${notebook.owner_name || "outra conta"}`}
-                      >
-                        <UsersThree size={11} weight="bold" />
-                        Compartilhado por {notebook.owner_name || "outra conta"} ·{" "}
-                        {SHARE_ROLE_LABELS[notebook.role]}
-                      </span>
-                    )}
+                    <ShareBadge notebook={notebook} />
                     {notebook.notes_count} {notebook.notes_count === 1 ? "nota" : "notas"}
                   </span>
                   <span className="nb-counts">

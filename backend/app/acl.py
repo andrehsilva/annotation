@@ -19,6 +19,7 @@ Só o dono compartilha: ninguém amplia a audiência sem ele saber.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 
 from .store import documents
@@ -170,6 +171,46 @@ def member_ids(db: Store, notebook_id: int) -> set[int]:
         for row in db.page_in("group_members", "group_id", group_ids):
             ids.add(documents.to_int(row["user_id"]))
     return ids
+
+
+def share_audience(db: Store, notebooks: Iterable[Row]) -> dict[int, tuple[list[str], int]]:
+    """Para cada caderno **meu** que saiu daqui: os grupos com que ele está compartilhado e quem eles levam.
+
+    A foto não responde isto: ela carrega `notebook_groups` pelos grupos de que a conta participa, e o
+    dono normalmente **não** está no grupo com quem compartilhou — sem esta consulta o compartilhamento
+    de saída fica invisível para quem o fez. Uma consulta em lote por caderno resolve a lista inteira,
+    e o dono não entra na conta da audiência: ele já está aqui.
+    """
+    owners = {notebook.id: notebook.owner_id for notebook in notebooks}
+    if not owners:
+        return {}
+    shares = list(
+        db.page_in("notebook_groups", "notebook_id", [str(notebook_id) for notebook_id in owners])
+    )
+    if not shares:
+        return {}
+    group_ids = sorted({row["group_id"] for row in shares})
+    names = {row["$id"]: row.get("name") or "" for row in db.page_in("groups", "$id", group_ids)}
+    audience: dict[str, set[int]] = {}
+    for row in db.page_in("group_members", "group_id", group_ids):
+        audience.setdefault(row["group_id"], set()).add(documents.to_int(row["user_id"]))
+
+    groups_of: dict[int, list[str]] = {}
+    people_of: dict[int, set[int]] = {}
+    for row in shares:
+        notebook_id = documents.to_int(row["notebook_id"])
+        group_id = row["group_id"]
+        groups_of.setdefault(notebook_id, []).append(names.get(group_id, ""))
+        # Um grupo apagado no meio do caminho deixa a linha órfã: o caderno continua compartilhado,
+        # só que com um público que não existe mais.
+        people_of.setdefault(notebook_id, set()).update(audience.get(group_id, ()))
+    return {
+        notebook_id: (
+            sorted(name for name in groups if name),
+            len(people_of[notebook_id] - {owners.get(notebook_id, 0)}),
+        )
+        for notebook_id, groups in groups_of.items()
+    }
 
 
 def touch_notebook(db: Store, notebook_id: int) -> None:

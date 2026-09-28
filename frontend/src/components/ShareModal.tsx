@@ -9,6 +9,8 @@ import type { ToastKind } from "./ToastStack";
 interface ShareModalProps {
   notebook: Notebook;
   onClose: () => void;
+  /** Compartilhar ou tirar o grupo muda o que o caderno diz na lista: o App recarrega os dois. */
+  onChanged: () => void;
   onError: (error: unknown) => void;
   onNotify: (message: string, kind?: ToastKind) => void;
 }
@@ -20,7 +22,7 @@ interface ShareModalProps {
  * eventuais membros diretos. Só o dono mexe nisso — para os outros a mesma lista é só leitura, o
  * que já responde "quem mais está vendo isto?".
  */
-export function ShareModal({ notebook, onClose, onError, onNotify }: ShareModalProps) {
+export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: ShareModalProps) {
   const [sharing, setSharing] = useState<NotebookSharing | null>(null);
   const [busy, setBusy] = useState(false);
   const [groupId, setGroupId] = useState<number | null>(null);
@@ -58,12 +60,13 @@ export function ShareModal({ notebook, onClose, onError, onNotify }: ShareModalP
       void action()
         .then((next) => {
           setSharing(next);
+          onChanged();
           onNotify(message, "success");
         })
         .catch(onError)
         .finally(() => setBusy(false));
     },
-    [onError, onNotify],
+    [onChanged, onError, onNotify],
   );
 
   const shared = new Set(sharing?.groups.map((entry) => entry.group_id) ?? []);
