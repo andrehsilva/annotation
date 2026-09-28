@@ -47,6 +47,8 @@ def _render(block: Row, media_links: Mapping[str, str]) -> str:
         return f"![{caption}]({url})"
     if block.type == "video":
         return f"[▶ {caption or url}]({url})"
+    if block.type == "pdf":
+        return f"[PDF {caption or url}]({url})"
     if block.type == "url":
         return f"[{caption or url}]({url})"
     return _text(block.text)

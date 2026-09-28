@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_valida
 
 from .values import BLOCK_TYPES
 
-BlockType = Literal["text", "code", "url", "image", "video"]
+BlockType = Literal["text", "code", "url", "image", "video", "pdf"]
 
 UTCDateTime = Annotated[
     datetime,
@@ -232,7 +232,7 @@ class NotebookPatch(BaseModel):
 
 class MediaOut(BaseModel):
     url: str
-    kind: Literal["image", "video"]
+    kind: Literal["image", "video", "pdf"]
     name: str
     size: int
 

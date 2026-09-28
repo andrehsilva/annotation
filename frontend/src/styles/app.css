@@ -1524,6 +1524,27 @@ iframe.element-media {
   font-size: 12px;
 }
 
+/* O PDF é um cartão clicável: quem desenha é o visualizador do navegador, na aba nova. */
+.pdf-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 22px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.pdf-link:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 /* A imagem abre por cima da tela; o clique no preview não herda nada de botão. */
 .media-open {
   display: block;

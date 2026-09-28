@@ -1,7 +1,7 @@
 import type { Block, BlockType, NotebookSummary } from "./types";
 
 /** Alt+Space walks this order. */
-export const KIND_ORDER: BlockType[] = ["text", "code", "url", "image", "video"];
+export const KIND_ORDER: BlockType[] = ["text", "code", "url", "image", "video", "pdf"];
 
 export const KIND_LABELS: Record<BlockType, string> = {
   text: "texto",
@@ -9,6 +9,7 @@ export const KIND_LABELS: Record<BlockType, string> = {
   url: "url",
   image: "imagem",
   video: "vídeo",
+  pdf: "pdf",
 };
 
 export const KIND_SHORT: Record<BlockType, string> = {
@@ -17,6 +18,7 @@ export const KIND_SHORT: Record<BlockType, string> = {
   url: "URL",
   image: "IMG",
   video: "VID",
+  pdf: "PDF",
 };
 
 export function nextKind(kind: BlockType): BlockType {

@@ -21,6 +21,7 @@ const HINTS: Record<BlockType, string> = {
   url: "Todos os links. Clique para abrir o site em outra aba, ou vá para a nota.",
   image: "Todas as imagens. Clique para abrir em modal, no tamanho real, ou vá para a nota.",
   video: "Todos os vídeos, tocando direto na lista. Use o botão para ir à nota.",
+  pdf: "Todos os PDFs. Clique para abrir em nova aba, ou vá para a nota.",
 };
 
 export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindViewProps) {
@@ -140,7 +141,7 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindVi
                   >
                     <img className="element-media" src={video} alt={item.caption || item.notebook_title} />
                   </button>
-                ) : (
+                ) : blockType === "video" ? (
                   <div className="element-body">
                     {youtube ? (
                       <iframe
@@ -160,6 +161,21 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindVi
                       <video className="element-media" src={video} controls />
                     )}
                   </div>
+                ) : blockType === "pdf" ? (
+                  <div className="element-body">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="pdf-link"
+                      title="Abrir PDF em nova aba"
+                    >
+                      <KindIcon size={32} weight="bold" />
+                      <span>{item.caption || "PDF"}</span>
+                    </a>
+                  </div>
+                ) : (
+                  <p className="element-text is-muted">— {KIND_LABELS[blockType]} vazia —</p>
                 )}
                 {item.caption && <p className="element-caption">{item.caption}</p>}
                 {footer(item)}

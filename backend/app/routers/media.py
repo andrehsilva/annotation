@@ -44,7 +44,14 @@ EXTENSIONS: dict[str, str] = {
     "video/webm": ".webm",
     "video/ogg": ".ogv",
     "video/quicktime": ".mov",
+    "application/pdf": ".pdf",
 }
+
+# O PDF é documento, não mídia embutida: `<img>`/`<video>` não desenham um PDF, e o bloco o abre numa
+# aba nova. Só para ele o `Content-Disposition` é `inline`, que é o que deixa o visualizador do
+# navegador desenhá-lo — o resto continua `attachment` (um SVG aberto como página executaria script
+# na origem do app). O `sandbox` do CSP segue valendo no PDF: ele desenha, mas em origem opaca.
+INLINE_TYPES = frozenset({"application/pdf"})
 
 
 def _read(file: UploadFile) -> bytes:
@@ -114,9 +121,10 @@ def upload(
     except Exception:
         _discard(db, filename)
         raise
+    kind = "video" if content_type.startswith("video/") else "image"
     return MediaOut(
         url=f"/media/{filename}",
-        kind="video" if content_type.startswith("video/") else "image",
+        kind="pdf" if content_type in INLINE_TYPES else kind,
         name=original_name,
         size=len(payload),
     )
@@ -135,6 +143,11 @@ def get_media(
     # Nome seguro para o cabeçalho: sem quebra de linha nem aspas, que reinventariam o header.
     raw_name = media.original_name or filename
     safe_name = "".join(ch for ch in raw_name if ch.isascii() and ch not in '"\\\r\n') or filename
+    content_type = (media.content_type or "").lower()
+    # PDF desenha só como documento: o bloco o abre em aba nova e o `inline` é o que deixa o
+    # visualizador do navegador desenhá-lo (medido no Chromium: com `attachment` a navegação é
+    # abortada e o arquivo vira download). O `sandbox` segue no CSP, então ele desenha em origem opaca.
+    disposition = "inline" if content_type in INLINE_TYPES else "attachment"
     return Response(
         content=db.storage.get_file_view(BUCKET_ID, media.row_id),
         media_type=media.content_type or None,
@@ -149,7 +162,7 @@ def get_media(
         # a mídia normalmente.
         headers={
             "Cache-Control": "private, no-store",
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
             "X-Content-Type-Options": "nosniff",
             "Content-Security-Policy": "default-src 'none'; sandbox",
         },

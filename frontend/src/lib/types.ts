@@ -1,4 +1,4 @@
-export type BlockType = "text" | "code" | "url" | "image" | "video";
+export type BlockType = "text" | "code" | "url" | "image" | "video" | "pdf";
 
 export interface Tag {
   id: number;
@@ -167,7 +167,7 @@ export interface Stats {
 
 export interface MediaUpload {
   url: string;
-  kind: "image" | "video";
+  kind: "image" | "video" | "pdf";
   name: string;
   size: number;
 }

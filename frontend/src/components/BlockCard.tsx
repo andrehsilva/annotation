@@ -304,6 +304,55 @@ export function BlockCard({
             )}
           </div>
         )}
+
+        {block.type === "pdf" && (
+          <div className="media-block">
+            <div className="media-inputs">
+              <input
+                ref={(element) => onRegisterRef(element)}
+                className="input"
+                value={block.url}
+                placeholder="cole a url do pdf"
+                onChange={(event) => onPatch({ url: event.target.value })}
+              />
+              <label className="btn btn-ghost btn-file">
+                <UploadSimple size={15} />
+                {uploading ? "enviando..." : "arquivo"}
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(event) => void upload(event.target.files?.[0])}
+                />
+              </label>
+            </div>
+            <input
+              className="input"
+              value={block.caption}
+              placeholder="legenda"
+              onChange={(event) => onPatch({ caption: event.target.value })}
+            />
+            {block.url.trim() && (
+              <figure className="media-frame">
+                <a
+                  href={block.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="pdf-link"
+                  title="Abrir PDF em nova aba"
+                >
+                  <KindIcon size={32} weight="bold" />
+                  <span>{block.caption || "PDF"}</span>
+                </a>
+                {block.caption && <figcaption>{block.caption}</figcaption>}
+              </figure>
+            )}
+            {!block.url.trim() && (
+              <p className="panel-hint">
+                <Paperclip size={13} /> Cole uma url ou envie um arquivo PDF do disco.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="block-tools">

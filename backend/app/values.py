@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 # Uma nota mistura estes tipos livremente; a ordem importa (Alt+Espaço cicla por ela).
-BLOCK_TYPES: tuple[str, ...] = ("text", "code", "url", "image", "video")
+BLOCK_TYPES: tuple[str, ...] = ("text", "code", "url", "image", "video", "pdf")
 
 ROLES: tuple[str, ...] = ("admin", "user")
 

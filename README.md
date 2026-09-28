@@ -1,7 +1,7 @@
 # NotAI
 
 Caderno de anotações para desenvolvedores. Cada **caderno** guarda **notas**; cada nota é uma
-sequência de **blocos** de cinco tipos: `texto`, `código`, `url`, `imagem`, `vídeo`. O texto corre
+sequência de **blocos** de seis tipos: `texto`, `código`, `url`, `imagem`, `vídeo`, `pdf`. O texto corre
 livre e o tipo do bloco troca no teclado, sem tirar a mão da linha.
 
 Cada pessoa entra com **e-mail e senha** e enxerga só os próprios cadernos — notas, blocos, tags,
@@ -138,7 +138,7 @@ mesmo e-mail em quinze minutos respondem `429` com `Retry-After`.
 
 | Atalho | Efeito |
 | --- | --- |
-| `/` (em bloco vazio) | Abre o menu de tipo: `1`–`5` ou setas + `Enter` escolhe texto, código, url, imagem ou vídeo |
+| `/` (em bloco vazio) | Abre o menu de tipo: `1`–`6` ou setas + `Enter` escolhe texto, código, url, imagem, vídeo ou pdf |
 | `#` (em bloco vazio) | Abre a paleta de tags: filtra as existentes, `Enter` aplica/remove, ou cria a tag digitada. A tag nova entra na nota e no caderno |
 | `[[` ou `@` (em bloco de texto) | Abre o seletor de notas: filtra por título, `Enter` insere `[[Título]]` e cria a menção |
 | `Ctrl+Shift+L` | Mesmo menu de tipo, para quando o bloco já tem texto (abre um bloco novo do tipo escolhido) |
@@ -192,7 +192,8 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
   a posição real na nota. A escolha fica guardada no navegador.
 - Nessa lista o clique principal depende do tipo: **url** abre o site em outra aba, **imagem** abre um
-  modal com a imagem no tamanho real, **vídeo** toca ali mesmo, e **texto/código** abre a nota já no
+  modal com a imagem no tamanho real, **vídeo** toca ali mesmo, **pdf** abre o arquivo em outra aba (o
+  navegador desenha o PDF, porque `/media` o serve `inline`), e **texto/código** abre a nota já no
   bloco (que fica destacado por alguns segundos).
 - A **imagem** abre em modal nos dois lugares onde ela aparece — o preview dentro da nota e o cartão da
   lista por tipo. O modal mostra o tamanho natural: se a imagem couber na janela, aparece 1:1; se não
@@ -249,7 +250,8 @@ Quem não conectou simplesmente não tem backup — o painel explica isso.
 
 Cada arquivo começa com front matter (`notebook`, `note`, `tags`, `related`, `mentions`, `created`,
 `updated`, `notai_id`) e depois repete o texto do bloco, a cerca de código com a linguagem,
-`[rótulo](url)` para url/vídeo e `![rótulo](url)` para imagem; arquivos locais (`/media/...`) são
+`[rótulo](url)` para url/vídeo, `[PDF rótulo](url)` para pdf e `![rótulo](url)` para imagem; arquivos
+locais (`/media/...`) são
 enviados para `NotAI/_media` e o link do Drive entra no lugar da url local (acima de 20 MB, ou se o
 arquivo sumiu, a url local fica).
 
@@ -349,8 +351,8 @@ e o papel não permite (rotas de admin).
 | `POST` | `/api/notes/{id}/blocks/reorder` | reordena (`{"block_ids": [...]}` com todos os blocos da nota) |
 | `PATCH/DELETE` | `/api/blocks/{id}` | edita/apaga bloco |
 | `GET/POST/PATCH/DELETE` | `/api/tags` | as tags de quem pediu, com contagem de uso; `POST` é idempotente por nome dentro da conta |
-| `POST` | `/api/media` | upload (imagem/vídeo, até 256 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono |
-| `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404` |
+| `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono |
+| `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404`. PDF sai `inline` (o navegador desenha); o resto, `attachment` |
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
 | `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
 | `POST` | `/api/drive/client-file` | recebe o JSON do cliente OAuth (multipart `file`) |
