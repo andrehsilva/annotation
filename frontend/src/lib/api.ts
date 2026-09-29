@@ -68,6 +68,8 @@ export const api = {
       method: "POST",
       ...json({ current_password, new_password }),
     }),
+  /** A introdução do primeiro login foi lida: a marca fica na conta e volta o usuário atualizado. */
+  dismissWelcome: () => request<User>("/api/auth/welcome", { method: "POST" }),
 
   events: (limit = 5) => request<EventFeed>(`/api/events?limit=${limit}`),
   markEventsRead: () => request<void>("/api/events/read", { method: "POST" }),

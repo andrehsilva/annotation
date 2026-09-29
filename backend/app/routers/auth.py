@@ -120,6 +120,19 @@ def me(user: Row = Depends(current_user)) -> UserOut:
     return UserOut.model_validate(user)
 
 
+@router.post("/welcome", response_model=UserOut)
+def welcome_seen(user: Row = Depends(current_user)) -> UserOut:
+    """A introdução do primeiro login foi lida: a marca fica na **conta**, não no navegador.
+
+    Só a própria conta marca (não há id na rota), e a linha volta inteira porque é ela que o SPA
+    guarda para decidir se a introdução abre no próximo login. Repetir a chamada só reescreve o
+    instante — o botão continua funcionando para quem abre a tela de novo pelo menu.
+    """
+    return UserOut.model_validate(
+        documents.change("users", user.id, {"welcome_seen_at": values.utcnow()}, owner_id=None)
+    )
+
+
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     payload: PasswordChangeIn,

@@ -68,7 +68,7 @@ não há SDK, CORS nem cookie de terceiro no navegador.
 
 | tabela | o que guarda | chave (`$id`) |
 | --- | --- | --- |
-| `users` | conta, papel, `is_active`, hash da senha, `activity_seen_at` | id numérico (legado verbatim) |
+| `users` | conta, papel, `is_active`, hash da senha, `activity_seen_at`, `welcome_seen_at` | id numérico (legado verbatim) |
 | `sessions` | sessão do cookie: sha256 do token **truncado a 32 chars** (o `$id` aceita 36) | id truncado |
 | `notebooks`, `notes`, `blocks` | o conteúdo, com `position` para a ordem; em `blocks`, `created_by` diz quem escreveu | id numérico |
 | `notebook_members` | papel do usuário no caderno (`owner`/`editor`/`viewer`) | `<user_id>_<notebook_id>` |
@@ -116,9 +116,14 @@ requisições e compara as respostas), `test_appwrite_schema.py` (idempotência 
   o último admin ativo fica protegido. **Grupos** cria, renomeia e apaga os grupos do
   compartilhamento e decide quem está em cada um: o grupo nasce vazio e quem entra depois já alcança
   tudo o que o grupo alcança.
-- **Qualquer um**: o chip do próprio nome (antes do botão do Drive) tem **Trocar senha** e **Sair**.
-  Trocar a senha derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de alguém,
-  derruba todas.
+- **Primeiro login**: a conta que nunca dispensou a introdução cai numa tela de **boas-vindas** —
+  cartões com o que o app faz e por onde se chega a cada coisa (o cartão do **Admin** só aparece para
+  quem tem o papel). No fim, **Não mostrar de novo** grava `welcome_seen_at` na conta e leva para o
+  primeiro caderno; sair da tela por outro caminho não marca nada, e ela volta no próximo login. A
+  mesma tela fica no menu do nome, em **Como usar**, para quem quiser reler.
+- **Qualquer um**: o chip do próprio nome (antes do botão do Drive) tem **Como usar**, **Trocar senha**
+  e **Sair**. Trocar a senha derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de
+  alguém, derruba todas.
 - **Sem acesso**: id de caderno, nota, bloco, tag ou arquivo fora dos cadernos que aquela conta
   alcança responde `404` (não `403`, para não confirmar que existe), e `401` aparece quando a sessão
   expira ou foi revogada — o app volta para a tela de entrada.
@@ -384,6 +389,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | --- | --- | --- |
 | `POST` | `/api/auth/login` · `/logout` · `/password` | entra (cookie de 30 dias) / sai / troca a própria senha |
 | `GET` | `/api/auth/me` | quem está logado; `401` se a sessão acabou |
+| `POST` | `/api/auth/welcome` | marca a introdução do primeiro login como lida (a marca é da conta, e a linha volta) |
 | `GET` | `/api/events?limit=` | o feed do sino: as últimas interações visíveis para quem pediu, com `unread` |
 | `POST` | `/api/events/read` | marca tudo até agora como visto (é o que zera o contador) |
 | `GET/POST` | `/api/admin/users` | lista as contas com cadernos, notas, blocos e mídia / cria (`409` se o e-mail existe) |

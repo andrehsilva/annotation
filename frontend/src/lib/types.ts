@@ -144,6 +144,10 @@ export interface NotebookSummary {
   owner_name: string;
   /** `role !== "owner"`: o caderno é de outra conta e chegou aqui por grupo. */
   shared: boolean;
+  /** O outro lado: os grupos com que **este** caderno saiu daqui — vazio quando não é meu. */
+  shared_groups: string[];
+  /** Quantas contas esses grupos levam até o caderno, fora eu (o dono já está aqui). */
+  shared_people: number;
 }
 
 export interface Notebook extends NotebookSummary {
@@ -259,6 +263,8 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
+  /** `null` = a introdução do primeiro login ainda não foi dispensada, e ela abre ao entrar. */
+  welcome_seen_at: string | null;
 }
 
 /** The same account seen from the admin screen: how much data it holds. */

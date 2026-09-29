@@ -1345,6 +1345,62 @@ iframe.element-media {
   color: var(--border-strong);
 }
 
+/* ----------------------------------------------------------- boas-vindas */
+
+/* A introdução do primeiro login: cartões de leitura, um por assunto. */
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 12px;
+}
+
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.welcome-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.welcome-card-body {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* O que o texto destaca é o que a tela mostra: o destaque volta para a cor de leitura. */
+.welcome-card-body strong,
+.welcome-card-body em {
+  color: var(--text);
+  font-style: normal;
+}
+
+.welcome-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.welcome-foot .panel-hint {
+  flex: 1 1 320px;
+}
+
 /* --------------------------------------------------------------- editor */
 
 .editor-head {

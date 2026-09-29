@@ -118,6 +118,8 @@ TABLE_SPECS: list[dict[str, Any]] = [
             col("created_at", "datetime"),
             col("last_login_at", "datetime"),
             col("activity_seen_at", "datetime"),
+            # Nulo = a introdução do primeiro login ainda não foi dispensada, e ela abre no login.
+            col("welcome_seen_at", "datetime"),
         ],
         "indexes": [{"key": "uq_users_email", "type": "unique", "columns": ["email"]}],
     },

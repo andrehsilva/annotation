@@ -27,6 +27,7 @@ interface TopBarProps {
   onToggleSidebar: () => void;
   onOpenDrive: () => void;
   onOpenAdmin: () => void;
+  onOpenWelcome: () => void;
   onLogout: () => void;
   onChangePassword: () => void;
   onBellOpenChange: (open: boolean) => void;
@@ -52,6 +53,7 @@ export function TopBar({
   onToggleSidebar,
   onOpenDrive,
   onOpenAdmin,
+  onOpenWelcome,
   onLogout,
   onChangePassword,
   onBellOpenChange,
@@ -384,6 +386,17 @@ export function TopBar({
           {menuOpen && (
             <div className="user-popover" role="menu">
               <p className="user-popover-head">{user.email}</p>
+              <button
+                type="button"
+                role="menuitem"
+                className="user-popover-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenWelcome();
+                }}
+              >
+                Como usar
+              </button>
               <button
                 type="button"
                 role="menuitem"

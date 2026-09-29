@@ -91,6 +91,7 @@ def user(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": parse_dt(row.get("created_at")),
         "last_login_at": parse_dt(row.get("last_login_at")),
         "activity_seen_at": parse_dt(row.get("activity_seen_at")),
+        "welcome_seen_at": parse_dt(row.get("welcome_seen_at")),
     }
 
 

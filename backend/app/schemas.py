@@ -401,6 +401,8 @@ class UserOut(ORMModel):
     is_active: bool
     created_at: UTCDateTime
     last_login_at: UTCDateTime | None = None
+    # Nulo = a introdução do primeiro login ainda não foi dispensada: o SPA a abre ao entrar.
+    welcome_seen_at: UTCDateTime | None = None
 
 
 class UserCreateIn(BaseModel):

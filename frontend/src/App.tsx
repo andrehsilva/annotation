@@ -22,6 +22,7 @@ import { TagsView } from "./components/TagsView";
 import { ToastStack } from "./components/ToastStack";
 import type { Toast, ToastKind } from "./components/ToastStack";
 import { TopBar } from "./components/TopBar";
+import { WelcomeView } from "./components/WelcomeView";
 import { Spinner } from "./components/ui";
 import { ApiError, api } from "./lib/api";
 import { notebookMatches } from "./lib/format";
@@ -48,6 +49,7 @@ export type View =
   | { kind: "notes" }
   | { kind: "tags" }
   | { kind: "relations" }
+  | { kind: "welcome" }
   | { kind: "admin" };
 
 const TOAST_MS: Record<ToastKind, number> = { info: 4000, success: 4000, error: 7000 };
@@ -216,6 +218,21 @@ export default function App() {
     setView({ kind: "notebook", id });
   }, []);
 
+  /**
+   * O botão do fim da introdução: grava a marca na conta e leva o usuário para o primeiro caderno.
+   * Se a API falhar, o aviso sai no toast e a tela não prende ninguém — o próximo login a reabre.
+   */
+  const dismissWelcome = useCallback(async () => {
+    try {
+      setUser(await api.dismissWelcome());
+    } catch (error) {
+      report(error);
+    }
+    const first = notebooks[0];
+    if (first) await openNotebook(first.id);
+    else setView({ kind: "notebooks" });
+  }, [notebooks, openNotebook, report]);
+
   const openNote = useCallback(
     async (notebookId: number, id: number, blockId: number | null = null) => {
       setAnchorBlock(blockId);
@@ -266,7 +283,9 @@ export default function App() {
         const list = await refreshWorkspace();
         if (cancelled) return;
         const first = list[0];
-        if (first) await openNotebook(first.id);
+        // Primeiro login: a introdução abre na frente, com o caderno esperando atrás dela.
+        if (user.welcome_seen_at === null) setView({ kind: "welcome" });
+        else if (first) await openNotebook(first.id);
       } catch (error) {
         if (!cancelled) report(error);
       } finally {
@@ -285,7 +304,9 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [user, openNotebook, refreshDriveStatus, refreshWorkspace, report, loadEvents]);
+    // `user.id` e não `user`: marcar a introdução troca o objeto sem que o login tenha mudado,
+    // e o fluxo de entrada não pode rodar de novo por causa disso.
+  }, [user?.id, openNotebook, refreshDriveStatus, refreshWorkspace, report, loadEvents]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -533,6 +554,9 @@ export default function App() {
         />
       );
     }
+    if (view.kind === "welcome" && user) {
+      return <WelcomeView user={user} onDismiss={() => void dismissWelcome()} />;
+    }
     if (view.kind === "note" && note) {
       return (
         <NoteEditor
@@ -652,6 +676,7 @@ export default function App() {
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onOpenDrive={openDrive}
         onOpenAdmin={() => setView({ kind: "admin" })}
+        onOpenWelcome={() => setView({ kind: "welcome" })}
         onLogout={() => void logout()}
         onChangePassword={() => setPasswordOpen(true)}
         feed={feed}
