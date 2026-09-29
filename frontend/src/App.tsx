@@ -14,6 +14,8 @@ import { NotebooksView } from "./components/NotebooksView";
 import { NotesView } from "./components/NotesView";
 import { NotebookView } from "./components/NotebookView";
 import { PasswordPanel } from "./components/PasswordPanel";
+import { PdfModal } from "./components/PdfModal";
+import type { PdfPreview } from "./components/PdfModal";
 import { RelationsView } from "./components/RelationsView";
 import { Sidebar } from "./components/Sidebar";
 import { TagsView } from "./components/TagsView";
@@ -72,6 +74,7 @@ export default function App() {
   const [feed, setFeed] = useState<EventFeed | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
   const [image, setImage] = useState<ImagePreview | null>(null);
+  const [pdf, setPdf] = useState<PdfPreview | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(
     () => localStorage.getItem("notai-sidebar") !== "closed",
   );
@@ -118,6 +121,7 @@ export default function App() {
     // Numa máquina compartilhada nada do usuário anterior pode sobrar por cima da tela de entrada.
     setToasts([]);
     setImage(null);
+    setPdf(null);
     setSearchOpen(false);
     setDriveOpen(false);
     setReady(false);
@@ -561,6 +565,7 @@ export default function App() {
             }
           }}
           onOpenImage={setImage}
+          onOpenPdf={setPdf}
         />
       );
     }
@@ -598,6 +603,7 @@ export default function App() {
           blockType={view.blockType}
           onOpenNote={openNote}
           onOpenImage={setImage}
+          onOpenPdf={setPdf}
           onError={report}
         />
       );
@@ -698,6 +704,7 @@ export default function App() {
         <PasswordPanel onClose={() => setPasswordOpen(false)} onNotify={notify} />
       )}
       {image && <ImageModal image={image} onClose={() => setImage(null)} />}
+      {pdf && <PdfModal pdf={pdf} onClose={() => setPdf(null)} />}
       {confirmRequest && (
         <ConfirmDialog
           title={confirmRequest.title}

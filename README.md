@@ -218,13 +218,19 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
   a posição real na nota. A escolha fica guardada no navegador.
 - Nessa lista o clique principal depende do tipo: **url** abre o site em outra aba, **imagem** abre um
-  modal com a imagem no tamanho real, **vídeo** toca ali mesmo, **pdf** abre o arquivo em outra aba (o
+  modal com a imagem no tamanho real, **vídeo** toca ali mesmo, **pdf** abre o modal do leitor (o
   navegador desenha o PDF, porque `/media` o serve `inline`), e **texto/código** abre a nota já no
   bloco (que fica destacado por alguns segundos).
 - A **imagem** abre em modal nos dois lugares onde ela aparece — o preview dentro da nota e o cartão da
   lista por tipo. O modal mostra o tamanho natural: se a imagem couber na janela, aparece 1:1; se não
   couber, entra encolhida até caber e um clique na imagem devolve o 1:1 com rolagem. A legenda diz as
   dimensões reais (`2000×1500px`). `Esc`, clique no fundo ou no botão fecham.
+- O **pdf** abre em modal nos dois lugares onde ele aparece — o cartão dentro da nota e o da lista por
+  tipo — com o leitor do próprio navegador dentro do quadro: página, zoom, busca e impressão no topo
+  dele. O link do cabeçalho leva o arquivo para uma aba nova, para quando o leitor não couber na
+  janela. PDF de outro site só aparece ali quando o site dele deixa ser emoldurado (é para isso que a
+  CSP tem `frame-src 'self' https:`); quando não deixa, a aba nova é o caminho. `Esc`, clique no fundo
+  ou no X fecham.
 - A lista de cadernos pode ser escondida e trazida de volta pelo botão no canto esquerdo da barra
   superior (ou pelo botão no cabeçalho da própria lista). O estado fica salvo no navegador, e com a
   lista escondida o conteúdo usa a largura extra.
@@ -404,7 +410,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `PATCH/DELETE` | `/api/blocks/{id}` | edita/apaga bloco |
 | `GET/POST/PATCH/DELETE` | `/api/tags` | as tags de quem pediu, com contagem de uso; `POST` é idempotente por nome dentro da conta |
 | `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono |
-| `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404`. PDF sai `inline` (o navegador desenha); o resto, `attachment` |
+| `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404`. PDF sai `inline` (o modal o emoldura e o navegador desenha); o resto, `attachment` |
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
 | `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
 | `POST` | `/api/drive/client-file` | recebe o JSON do cliente OAuth (multipart `file`) |

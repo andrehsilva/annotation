@@ -8,6 +8,7 @@ import type { Block, BlockType, Note, NoteRelated, NoteSummary, Tag, TagUsage } 
 import { BlockCard } from "./BlockCard";
 import type { MentionToken } from "./BlockCard";
 import type { ImagePreview } from "./ImageModal";
+import type { PdfPreview } from "./PdfModal";
 import { KindMenu } from "./KindMenu";
 import { MentionPalette } from "./MentionPalette";
 import { NoteLinks } from "./NoteLinks";
@@ -31,6 +32,7 @@ interface NoteEditorProps {
   onToggleTag: (tagId: number, attached: boolean) => void | Promise<void>;
   onRenameNote: (title: string) => void | Promise<void>;
   onOpenImage: (image: ImagePreview) => void;
+  onOpenPdf: (pdf: PdfPreview) => void;
   onError: (error: unknown) => void;
 }
 
@@ -46,6 +48,7 @@ export function NoteEditor({
   onToggleTag,
   onRenameNote,
   onOpenImage,
+  onOpenPdf,
   onError,
 }: NoteEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>(note.blocks);
@@ -521,6 +524,7 @@ export function NoteEditor({
               }}
               onMention={(token) => handleMention(block.id, token)}
               onOpenImage={onOpenImage}
+              onOpenPdf={onOpenPdf}
             />
             {kindMenuFor === block.id && (
               <KindMenu

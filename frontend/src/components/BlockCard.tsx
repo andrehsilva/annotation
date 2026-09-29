@@ -11,6 +11,7 @@ import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, hostOf, isForeignBlock, vimeoId, youtubeId } from "../lib/format";
 import type { Block } from "../lib/types";
 import type { ImagePreview } from "./ImageModal";
+import type { PdfPreview } from "./PdfModal";
 
 const LANGUAGES = [
   "bash",
@@ -64,6 +65,7 @@ interface BlockCardProps {
   /** `[[` or `@` at the caret opens the note picker; null means the token is gone. */
   onMention: (token: MentionToken | null) => void;
   onOpenImage: (image: ImagePreview) => void;
+  onOpenPdf: (pdf: PdfPreview) => void;
 }
 
 export function BlockCard({
@@ -83,6 +85,7 @@ export function BlockCard({
   onKindClick,
   onMention,
   onOpenImage,
+  onOpenPdf,
 }: BlockCardProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -361,16 +364,17 @@ export function BlockCard({
             />
             {block.url.trim() && (
               <figure className="media-frame">
-                <a
-                  href={block.url}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
                   className="pdf-link"
-                  title="Abrir PDF em nova aba"
+                  onClick={() =>
+                    onOpenPdf({ url: block.url, title: block.caption || "PDF" })
+                  }
+                  title="Ler o PDF aqui"
                 >
                   <KindIcon size={32} weight="bold" />
                   <span>{block.caption || "PDF"}</span>
-                </a>
+                </button>
                 {block.caption && <figcaption>{block.caption}</figcaption>}
               </figure>
             )}

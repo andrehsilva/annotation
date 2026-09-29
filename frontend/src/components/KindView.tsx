@@ -6,12 +6,14 @@ import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, hostOf, relativeTime, vimeoId, youtubeId } from "../lib/format";
 import type { BlockListItem, BlockType } from "../lib/types";
 import type { ImagePreview } from "./ImageModal";
+import type { PdfPreview } from "./PdfModal";
 import { EmptyState, Spinner } from "./ui";
 
 interface KindViewProps {
   blockType: BlockType;
   onOpenNote: (notebookId: number, noteId: number, blockId: number) => void;
   onOpenImage: (image: ImagePreview) => void;
+  onOpenPdf: (pdf: PdfPreview) => void;
   onError: (error: unknown) => void;
 }
 
@@ -21,10 +23,10 @@ const HINTS: Record<BlockType, string> = {
   url: "Todos os links. Clique para abrir o site em outra aba, ou vá para a nota.",
   image: "Todas as imagens. Clique para abrir em modal, no tamanho real, ou vá para a nota.",
   video: "Todos os vídeos, tocando direto na lista. Use o botão para ir à nota.",
-  pdf: "Todos os PDFs. Clique para abrir em nova aba, ou vá para a nota.",
+  pdf: "Todos os PDFs, lidos aqui mesmo num modal. Use o botão para ir à nota.",
 };
 
-export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindViewProps) {
+export function KindView({ blockType, onOpenNote, onOpenImage, onOpenPdf, onError }: KindViewProps) {
   const [items, setItems] = useState<BlockListItem[] | null>(null);
   const KindIcon = KIND_ICONS[blockType];
 
@@ -168,16 +170,17 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onError }: KindVi
                   </div>
                 ) : blockType === "pdf" ? (
                   <div className="element-body">
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
                       className="pdf-link"
-                      title="Abrir PDF em nova aba"
+                      onClick={() =>
+                        onOpenPdf({ url: item.url, title: item.caption || item.note_title })
+                      }
+                      title="Ler o PDF aqui"
                     >
                       <KindIcon size={32} weight="bold" />
                       <span>{item.caption || "PDF"}</span>
-                    </a>
+                    </button>
                   </div>
                 ) : (
                   <p className="element-text is-muted">— {KIND_LABELS[blockType]} vazia —</p>

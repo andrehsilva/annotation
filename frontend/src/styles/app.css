@@ -1626,7 +1626,7 @@ iframe.element-media {
   white-space: nowrap;
 }
 
-/* O PDF é um cartão clicável: quem desenha é o visualizador do navegador, na aba nova. */
+/* O PDF é um cartão clicável: quem desenha é o visualizador do navegador, dentro do modal. */
 .pdf-link {
   display: flex;
   align-items: center;
@@ -1638,13 +1638,44 @@ iframe.element-media {
   border-radius: var(--radius-md);
   background: var(--bg);
   color: var(--text-muted);
+  font-family: inherit;
   font-size: 13px;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .pdf-link:hover {
   border-color: var(--primary);
   color: var(--primary);
+}
+
+/* O leitor: cabeçalho com o título e as ações, e o quadro do PDF ocupando o resto da altura. */
+.pdf-sheet {
+  width: min(1080px, 96vw);
+  height: min(88vh, 940px);
+}
+
+.pdf-sheet .confirm-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pdf-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
 }
 
 /* A imagem abre por cima da tela; o clique no preview não herda nada de botão. */
