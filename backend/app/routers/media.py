@@ -76,6 +76,35 @@ def _discard(db: Store, filename: str) -> None:
         pass
 
 
+def _store(db: Store, filename: str, payload: bytes, content_type: str, user_id: int) -> None:
+    """Grava no bucket traduzindo a recusa do Appwrite: sem isto o cliente recebia um `500` seco.
+
+    O bucket é quem manda na extensão (`allowed_file_extensions`, o schema o mantém em dia) e, quando
+    o Storage do Appwrite está fora, o erro chega como página HTML do Cloudflare — as duas coisas
+    viravam "Internal Server Error" na tela, sem dizer o que fazer.
+    """
+    try:
+        db.storage.create_file(
+            BUCKET_ID,
+            filename,
+            InputFile.from_bytes(payload, filename, content_type),
+            permissions=[f'read("user:{user_id}")'],  # o dono é o único que lê o arquivo
+        )
+    except AppwriteException as error:
+        if error.code == 400 and "extension" in str(error.message).lower():
+            raise HTTPException(
+                status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                "O bucket do servidor recusa este tipo de arquivo — rode "
+                "`tools/appwrite_schema.py --apply` para pôr a lista de extensões em dia",
+            ) from error
+        if error.code and error.code >= 500:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "O armazenamento do Appwrite não respondeu agora. Tente de novo em instantes",
+            ) from error
+        raise
+
+
 @router.post("", response_model=MediaOut, status_code=status.HTTP_201_CREATED)
 def upload(
     file: UploadFile = File(...),
@@ -94,12 +123,7 @@ def upload(
     # O rowId de `media_files` é o nome do arquivo: o mesmo que a URL `/media/<nome>` usa.
     filename = f"{uuid.uuid4().hex}{extension}"
     original_name = file.filename or filename
-    db.storage.create_file(
-        BUCKET_ID,
-        filename,
-        InputFile.from_bytes(payload, filename, content_type),
-        permissions=[f'read("user:{user.id}")'],  # o dono é o único que lê o arquivo
-    )
+    _store(db, filename, payload, content_type, user.id)
     try:
         # `owner_id` descarta a foto do dono já no commit: a linha nova só existe lá, e a leitura
         # logo depois não pode receber a foto antiga do TTL.

@@ -144,7 +144,21 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
               </p>
             )}
             {status.pending && <p className="panel-hint">Envio automático agendado.</p>}
-            {status.last_error && <p className="panel-hint is-error">{status.last_error}</p>}
+            {status.last_error && (
+              // A falha do Drive pode trazer o link para ligar a API no projeto: ele vira âncora,
+              // que é o que a pessoa precisa clicar.
+              <p className="panel-hint is-error">
+                {status.last_error.split(/(https?:\/\/\S+)/).map((part, index) =>
+                  part.startsWith("http") ? (
+                    <a key={index} href={part} target="_blank" rel="noreferrer">
+                      {part}
+                    </a>
+                  ) : (
+                    part
+                  ),
+                )}
+              </p>
+            )}
             <div className="btn-row">
               <button
                 type="button"

@@ -1,8 +1,9 @@
 # NotAI
 
-Caderno de anotações para desenvolvedores. Cada **caderno** guarda **notas**; cada nota é uma
-sequência de **blocos** de seis tipos: `texto`, `código`, `url`, `imagem`, `vídeo`, `pdf`. O texto corre
-livre e o tipo do bloco troca no teclado, sem tirar a mão da linha.
+Caderno de anotações para tudo o que se escreve — código, receita, ideia, reunião. Cada **caderno**
+guarda **notas**; cada nota é uma sequência de **blocos** de seis tipos: `texto`, `código`, `url`,
+`imagem`, `vídeo`, `pdf`. O texto corre livre e o tipo do bloco troca no teclado, sem tirar a mão da
+linha.
 
 Cada pessoa entra com **e-mail e senha** e enxerga os próprios cadernos — e os que o dono
 compartilhou com os grupos dela. Fora desses, notas, blocos, tags, vínculos e arquivos são de quem os
@@ -94,8 +95,14 @@ Convenções que valem a pena saber antes de mexer:
   é apagado sai dela — o BFF não relê o Appwrite depois de escrever, porque nesta instância a
   consulta logo depois do commit ainda devolve o estado anterior (medido). Ler o Appwrite a cada
   requisição custava uma dúzia de idas de ~40 ms; hoje a leitura quente são as duas do login.
+  **Comitar uma transação publica na foto de cada dono o que ela escreveu** (`Store.transaction`): o
+  `pending` é por thread, então esquecer isso prendia a linha — a tag criada sumia da lista, do
+  seletor e do caderno até o TTL de 30 s, e só às vezes.
 - **Upload**: o bucket está limitado a **30 MB** pelo `_APP_STORAGE_LIMIT` do servidor; para os 256 MB
-  do app é preciso subir essa variável no `.env` do Appwrite e recriar o stack.
+  do app é preciso subir essa variável no `.env` do Appwrite e recriar o stack. A **lista de
+  extensões** aceitas também é do schema (`MEDIA_EXTENSIONS`): o `--check` compara com o bucket e o
+  `--apply` conserta — sem essa comparação o `.pdf` ficou de fora e o upload de PDF respondia "File
+  extension not allowed".
 - **Backup** passa a ser do Appwrite: `mysqldump` do banco + volumes `appwrite-uploads` e o `.env`
   (`_APP_OPENSSL_KEY_V1`). Os tokens do Drive continuam em `backend/data/drive_*.json`.
 
@@ -415,7 +422,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `POST` | `/api/notes/{id}/blocks/reorder` | reordena (`{"block_ids": [...]}` com todos os blocos da nota) |
 | `PATCH/DELETE` | `/api/blocks/{id}` | edita/apaga bloco |
 | `GET/POST/PATCH/DELETE` | `/api/tags` | as tags de quem pediu, com contagem de uso; `POST` é idempotente por nome dentro da conta |
-| `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono |
+| `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono. `415` para tipo/extensão recusada e `503` quando o Storage do Appwrite não responde |
 | `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404`. PDF sai `inline` (o modal o emoldura e o navegador desenha); o resto, `attachment` |
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
 | `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
@@ -424,4 +431,4 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `POST` | `/api/drive/connect/code` | troca pelo token o que o usuário colou de volta (a URL de retorno ou o `code`) |
 | `POST` | `/api/drive/disconnect` | esquece token e ids em cache; não toca em nada no Drive |
 | `PATCH` | `/api/drive/settings` | `{"auto_sync": true\|false}` |
-| `POST` | `/api/drive/sync` | exporta agora e devolve o resumo (`409` se não conectado ou já rodando) |
+| `POST` | `/api/drive/sync` | exporta agora e devolve o resumo (`409` se não conectado ou já rodando). O `403` do Google por API desligada no projeto vira uma frase com o link para ligá-la |

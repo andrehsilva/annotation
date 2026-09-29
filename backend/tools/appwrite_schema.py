@@ -83,7 +83,20 @@ MAX_MEDIA_BYTES = 256 * 1024 * 1024
 # Teto do servidor: o bucket não passa de `_APP_STORAGE_LIMIT` (30 MB no padrão do Appwrite).
 # Enquanto o `.env` do Appwrite não subir, o bucket fica neste valor — e o script diz isso.
 SERVER_STORAGE_CAP = 30_000_000
-MEDIA_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "mp4", "webm", "ogv", "mov"]
+MEDIA_EXTENSIONS = [
+    "png",
+    "jpg",
+    "jpeg",
+    "gif",
+    "webp",
+    "avif",
+    "svg",
+    "mp4",
+    "webm",
+    "ogv",
+    "mov",
+    "pdf",
+]
 
 OWNER = "owner_id"
 TEXT_LIMIT = 16777215  # 16 MB: o texto de um bloco cabe inteiro numa coluna string
@@ -593,7 +606,25 @@ def ensure_bucket(storage: Storage, apply: bool) -> bool:
         log(f"[schema] {'+' if apply else 'falta'} bucket {BUCKET_ID}")
         return True
     # O SDK deste dialeto devolve dicionário, não modelo: a chave é a do JSON da API.
+    changed = False
     current = int(bucket.get("maximumFileSize") or 0)
+    extensions = [str(value) for value in (bucket.get("allowedFileExtensions") or [])]
+    missing_types = [value for value in MEDIA_EXTENSIONS if value not in extensions]
+    if missing_types:
+        # O `--check` só olhava o tamanho, e foi assim que o `.pdf` ficou de fora do bucket mesmo
+        # estando no schema e no app: o upload de PDF respondia "File extension not allowed".
+        if apply:
+            storage.update_bucket(
+                bucket_id=BUCKET_ID,
+                name=BUCKET_SPEC["name"],
+                maximum_file_size=current or SERVER_STORAGE_CAP,
+                allowed_file_extensions=MEDIA_EXTENSIONS,
+            )
+        log(
+            f"[schema] {'~' if apply else 'falta'} bucket {BUCKET_ID} aceitar "
+            f"{', '.join(missing_types)}"
+        )
+        changed = True
     if current < MAX_MEDIA_BYTES:
         if apply:
             try:
@@ -608,8 +639,8 @@ def ensure_bucket(storage: Storage, apply: bool) -> bool:
                     raise
                 report_storage_cap(refused)
         log(f"[schema] {'~' if apply else 'falta'} limite do bucket {BUCKET_ID} subindo para 256 MB")
-        return True
-    return False
+        changed = True
+    return changed
 
 
 # ------------------------------------------------------------------ comandos

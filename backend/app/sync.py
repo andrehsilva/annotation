@@ -46,6 +46,10 @@ AUTO_SYNC_DEFAULT = "on"
 DEFAULT_DELAY = 20
 BUSY_DELAY = 10
 
+# O Google responde isto no 403 quando a Drive API não foi ligada no projeto das credenciais — a
+# falha número um de quem acabou de criar o cliente OAuth.
+API_NOT_ENABLED = "has not been used in project"
+
 # Dropped on disconnect: everything cached about the Drive tree of the account we left.
 CONNECTION_KEYS = (
     "root_folder_id",
@@ -201,7 +205,16 @@ def error_message(error: BaseException) -> str:
         return drive.EXPIRED
     if isinstance(error, HttpError):
         reason = getattr(error, "reason", "") or str(error)
-        return f"Drive: {getattr(error.resp, 'status', '?')} {reason}".strip()
+        status = getattr(getattr(error, "resp", None), "status", "?")
+        if status == 403 and API_NOT_ENABLED in reason:
+            # A mensagem do Google é um parágrafo com o link no meio; aqui vira uma frase e o link,
+            # que é o que a pessoa precisa clicar (e o painel transforma em âncora).
+            link = next((word for word in reason.split() if word.startswith("https://")), "")
+            return (
+                f"A API do Google Drive não está ligada no projeto das credenciais: ligue em {link} "
+                "e tente de novo em alguns minutos"
+            )
+        return f"Drive: {status} {reason}".strip()
     if isinstance(error, (TransportError, OSError)):  # offline, DNS down, connection refused
         return "sem conexão com o Google Drive"
     return str(error) or type(error).__name__

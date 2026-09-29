@@ -145,8 +145,9 @@ export function WelcomeView({ user, onDismiss }: { user: User; onDismiss: () => 
           Boas-vindas, {user.display_name || user.email}
         </h1>
         <p className="view-lede">
-          Um caderno de anotações para código. Esta é a leitura do primeiro login: o que o app faz e
-          por onde se chega a cada coisa. No fim, o botão decide se ela precisa voltar.
+          Um caderno para tudo o que você anota — código, receita, ideia, reunião, link. Esta é a
+          leitura do primeiro login: o que o app faz e por onde se chega a cada coisa. No fim, o
+          botão decide se ela precisa voltar.
         </p>
       </header>
 

@@ -331,8 +331,14 @@ class Store:
         `create_row(..., transaction_id=)` porque é a única forma de gravar permissões na linha.
 
         A leitura **não enxerga linha estagiada** (medido), e a consulta também não enxerga a linha
-        logo depois do commit: passe `owner_id` e o `invalidate` daqui aplica na foto do dono o que
-        foi gravado nesta transação, sem reler nada do Appwrite.
+        logo depois do commit: o commit aplica na foto de cada dono o que a transação gravou para ele,
+        sem reler nada do Appwrite. `owner_id` continua para quem só **estagiou** linhas (vínculo,
+        junção), que não passam pelo `remember` e por isso não deixam dono pendente.
+
+        Não publicar é o bug que isto fecha: a tag criada numa transação sem `owner_id` ficava presa
+        no `pending` **daquela thread** e sumia da lista (`GET /api/tags`), do seletor e do caderno
+        até o TTL de 30 s da foto — de vez em quando, porque dependia de a próxima requisição cair na
+        mesma thread.
         """
         transaction_id = self.tables.create_transaction(ttl)["$id"]
         depth = getattr(self._local, "tx_depth", 0)
@@ -367,8 +373,12 @@ class Store:
                 ) from error
             raise
         self._local.tx_depth = depth
+        if depth:
+            return  # aninhada: quem publica é o commit de fora
         if owner_id is not None:
             self.invalidate(owner_id)
+        for owner in list(getattr(self._local, "pending", {}) or {}):
+            self.invalidate(owner)
 
     def stage(self, transaction_id: str, operations: list[dict[str, Any]]) -> None:
         """Operações extras na mesma transação (sem permissão: a rota descarta).

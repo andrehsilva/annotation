@@ -87,16 +87,20 @@ class FakeStorage:
                       encryption=None, antivirus=None, transformations=None):
         self.buckets[bucket_id] = {
             "maximumFileSize": maximum_file_size,
+            "allowedFileExtensions": list(allowed_file_extensions or []),
             "name": name,
         }
         return self.get_bucket(bucket_id)
 
     def update_bucket(self, bucket_id, name, **kwargs):
-        self.buckets[bucket_id].update(
-            {"maximumFileSize": kwargs["maximum_file_size"]}
-            if kwargs.get("maximum_file_size") is not None
-            else {}
-        )
+        # O servidor guarda as duas coisas; o duplo precisa guardar também, senão a checagem do
+        # schema acha que a lista de extensões nunca entrou e tenta de novo em toda passada.
+        updated = {}
+        if kwargs.get("maximum_file_size") is not None:
+            updated["maximumFileSize"] = kwargs["maximum_file_size"]
+        if kwargs.get("allowed_file_extensions") is not None:
+            updated["allowedFileExtensions"] = list(kwargs["allowed_file_extensions"])
+        self.buckets[bucket_id].update(updated)
         return self.get_bucket(bucket_id)
 
 
