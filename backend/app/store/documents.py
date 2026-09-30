@@ -232,23 +232,6 @@ def note_tag(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def drive_file(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": to_int(row["$id"]),
-        "note_id": to_int(row["$id"]),
-        "file_id": row.get("file_id") or "",
-        "folder_id": row.get("folder_id") or "",
-        "drive_path": row.get("drive_path") or "",
-        "checksum": row.get("checksum") or "",
-        "synced_at": parse_dt(row.get("synced_at")),
-    }
-
-
-def drive_state(row: dict[str, Any]) -> dict[str, Any]:
-    user_id, _, key = row["$id"].partition("_")
-    return {"user_id": to_int(user_id), "key": row.get("key") or key, "value": row.get("value") or ""}
-
-
 NORMALIZE = {
     "users": user,
     "sessions": session,
@@ -264,8 +247,6 @@ NORMALIZE = {
     "note_tags": note_tag,
     "media_files": media,
     "events": event,
-    "drive_files": drive_file,
-    "drive_state": drive_state,
 }
 
 def normalize(table: str, row: dict[str, Any]) -> Row:
@@ -335,11 +316,6 @@ def operation(table: str, row_id: int | str, data: dict[str, Any]) -> dict[str, 
         "rowId": str(row_id),
         "data": _clean(data),
     }
-
-
-def drive_file_id(user_id: int | str, note_id: int | str) -> str:
-    """rowId do espelho da nota no Drive: por conta, porque o caderno pode ter mais de um membro."""
-    return f"{user_id}_{note_id}"
 
 
 def tag_key(owner_id: int | str, name: str) -> str:

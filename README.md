@@ -84,7 +84,6 @@ Appwrite, então não há SDK, CORS nem cookie de terceiro no navegador.
 | `note_relations`, `block_links` | vínculos declarados e menções `[[…]]`; índice unique no par | id numérico |
 | `media_files` + bucket `media` | arquivos enviados; o arquivo é servido para o dono e para quem alcança a nota que o cita | nome do arquivo |
 | `events` | auditoria (a **Atividade**), uma linha por escrita, com o `note_id` de onde ela aconteceu | id numérico |
-| `drive_files`, `drive_state` | estado do export para o Drive | `<user_id>_<note_id>` / `<user_id>_<chave>` |
 | `counters` | contador de id por família (incremento atômico) | nome da família |
 
 Convenções que valem a pena saber antes de mexer:
@@ -108,7 +107,7 @@ Convenções que valem a pena saber antes de mexer:
   `--apply` conserta — sem essa comparação o `.pdf` ficou de fora e o upload de PDF respondia "File
   extension not allowed".
 - **Backup** passa a ser do Appwrite: `mysqldump` do banco + volumes `appwrite-uploads` e o `.env`
-  (`_APP_OPENSSL_KEY_V1`). Os tokens do Drive continuam em `backend/data/drive_*.json`.
+  (`_APP_OPENSSL_KEY_V1`).
 
 Ferramentas em `backend/tools/`: `appwrite_schema.py` (schema como código; o `--apply --prune` apaga o
 que saiu dele), `reset_appwrite.py` (zera tabelas, bucket, contadores e sessões, e recria só o admin —
@@ -133,7 +132,7 @@ offline) e `test_store_live.py` (a camada de dados contra a instância real).
   próximo login. A mesma tela fica no menu do nome, em **Como usar**, para quem quiser reler.
 - **Qualquer um**: o menu do próprio nome — o único lugar com as ações da conta — tem
   **Atividade** (as 5 últimas interações, com o contador do que não foi visto), **Admin** (para quem
-  tem o papel), **Backup no Drive**, **Como usar**, **Trocar senha** e **Sair**. Trocar a senha
+  tem o papel), **Como usar**, **Trocar senha** e **Sair**. Trocar a senha
   derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de alguém, derruba todas.
 - **Sem acesso**: id de nota, bloco, tag ou arquivo fora das notas que aquela conta alcança responde
   `404` (não `403`, para não confirmar que existe), e `401` aparece quando a sessão expira ou foi
@@ -186,7 +185,7 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
 ## Tela
 
 - Sem sessão válida o app abre na tela de entrada (e-mail e senha); a lista, os contadores, a busca,
-  as tags, o grafo e o Drive passam a mostrar só o que é daquela conta. A navegação — **Notas** (a
+  as tags e o grafo passam a mostrar só o que é daquela conta. A navegação — **Notas** (a
   home), **Tags** e **Relações** — e os **contadores por tipo de bloco** ficam no cabeçalho, todos só
   com ícone + número (o nome aparece no hover), com as seções e os contadores separados por um pipe.
   Quando a janela é estreita demais para a barra inteira, o que não cabe vai para o menu **⋯**
@@ -209,7 +208,7 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   formulário de criação e as ações de cada linha — redefinir senha, ativar/desativar e excluir, com o
   mesmo modal de confirmação das outras ações destrutivas. Detalhes em [Usuários](#usuários).
 - O menu do nome reúne tudo o que é da conta: **Atividade** (as 5 últimas interações, com o contador
-  do que não foi visto), **Admin** (só para quem tem o papel), **Backup no Drive**, **Como usar**,
+  do que não foi visto), **Admin** (só para quem tem o papel), **Como usar**,
   **Trocar senha** e **Sair** — as ações da conta ficaram todas aqui, sem chips soltos no cabeçalho.
   **Atividade** abre um painel ancorado no canto direito do cabeçalho e ele abre sozinho ao entrar
   quando há alguma coisa no feed (uma vez por login); ao fechar (clique fora, `Esc` ou novo clique no
@@ -254,8 +253,6 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   ou no X fecham.
 - O grafo em **Relações** colore cada nota pela **primeira tag** dela — a legenda lista as tags que
   aparecem no desenho, e nota sem tag fica na cor neutra.
-- O **Backup no Drive**, no menu do nome, abre o painel do export; o item mostra `ligado` quando a
-  conta já está conectada.
 
 As edições são salvas sozinhas (debounce de 700 ms) e o que ainda não foi enviado é descarregado ao
 sair da nota.
@@ -279,42 +276,6 @@ A tela **Relações** é só leitura: o grafo desenha uma bolinha por nota ligad
 relação e tracejada para menção, e a lista embaixo mostra cada vínculo, com remover só nas relações
 declaradas (uma menção sai editando o texto).
 
-## Backup no Google Drive
-
-O app mantém uma cópia das notas no Drive do próprio usuário, um `.md` por nota, na raiz:
-`NotAI/<Nota>.md`. É **mão única**: o NotAI escreve, nunca lê nem apaga nada no Drive —
-apagar uma nota no app deixa o arquivo lá (órfão, para remoção manual). O escopo é `drive.file`, então
-o app só enxerga o que ele mesmo criou.
-
-**Cada conta conecta a própria conta Google** (o cliente OAuth e o token ficam em
-`backend/data/drive_client.<id>.json` e `drive_token.<id>.json`, e o estado do export em `drive_state`
-por usuário): cada conta exporta as notas que alcança — as dela e as compartilhadas com ela —, e a
-conexão de um não aparece para os outros. Quem não conectou simplesmente não tem backup — o painel
-explica isso.
-
-Cada arquivo começa com front matter (`note`, `tags`, `related`, `mentions`, `created`, `updated`,
-`notai_id`) e depois repete o texto do bloco, a cerca de código com a linguagem,
-`[rótulo](url)` para url/vídeo, `[PDF rótulo](url)` para pdf e `![rótulo](url)` para imagem; arquivos
-locais (`/media/...`) são
-enviados para `NotAI/_media` e o link do Drive entra no lugar da url local (acima de 20 MB, ou se o
-arquivo sumiu, a url local fica).
-
-Depois de cada escrita na API o app espera 20 s (o autosave faz rajadas) e envia só o que mudou —
-a comparação é um sha256 do markdown já gravado em `drive_files`. O painel mostra o último envio, o
-resumo, o erro mais recente, um botão **Sincronizar agora** e o liga/desliga do envio automático
-(também por usuário). Renomear a nota renomeia o arquivo, **mantendo o mesmo id** no Drive.
-
-Para conectar (uma vez, ~2 min): criar um projeto no
-[Google Cloud Console](https://console.cloud.google.com/), ativar a **Google Drive API**, criar a
-tela de permissão OAuth (tipo **Externo**, com o seu e-mail em "Usuários de teste"), criar um ID de
-cliente do tipo **Aplicativo para computador** e baixar o JSON. O painel recebe esse JSON e a conexão
-é em **dois passos**, porque o servidor não tem navegador: **Conectar com o Google** devolve a tela de
-consentimento (abre em outra aba, com PKCE e `offline` para vir o `refresh_token`), e o Google devolve
-o navegador para `http://localhost:8765/…` — endereço do computador de quem autorizou, que não abre —
-de modo que o **passo final é colar de volta a URL inteira** da barra de endereço, que traz o `code`.
-O token fica em `backend/data/` (pasta fora do git). No modo "Testes" do Google o refresh token expira
-em 7 dias: o app percebe, descarta o token e o painel volta a pedir a conexão.
-
 ## Modelo de dados
 
 O modelo lógico é o de sempre (abaixo); o de-para físico com as tabelas do Appwrite, as chaves e as
@@ -330,7 +291,6 @@ users ──< sessions
         └── (papel: owner|editor|viewer)
 users ──< media_files        (dono de cada arquivo enviado)
 users ──< group_members >── groups ──< note_groups >── notes   (o grupo é o público do compartilhamento)
-users ──< drive_state        (chave/valor do export, uma linha por usuário)
 users ──< events             (o feed da Atividade: quem fez, o quê, em quê, e em qual nota)
 ```
 
@@ -380,12 +340,6 @@ ação: se a ação falha, não sobra histórico. Quem pode ler é decidido no s
 outras contas leem as próprias linhas e as da nota em que participam, e `users.activity_seen_at`
 guarda até quando aquela conta já viu — é o que alimenta o contador de não lidas.
 
-O backup usa duas tabelas à parte: `drive_files` (uma linha por nota **e por conta** — o rowId é
-`<user_id>_<note_id>`, porque uma nota compartilhada tem um espelho por conta: id do arquivo no
-Drive, o caminho `<Nota>.md`, sha256 do markdown enviado) e `drive_state` (chave/valor,
-por usuário, com os ids de pasta, os links de mídia, o resumo do último envio e o `auto_sync`).
-Nenhuma das duas guarda conteúdo de nota.
-
 ## API
 
 Todas as rotas de `/api` (menos `login` e `health`) exigem o cookie de sessão; sem ele a resposta é
@@ -406,7 +360,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `GET/PATCH/DELETE` | `/api/admin/groups/{id}` | os ids de quem está no grupo / renomeia / apaga (leva junto os vínculos com as notas) |
 | `PUT/DELETE` | `/api/admin/groups/{id}/members/{user_id}` | põe/tira alguém do grupo (idempotente) |
 | `GET/POST` | `/api/notes` | as notas que a conta alcança, da mais recente para a mais antiga, com o papel de quem pediu, o dono, as tags, o trecho e as contagens por tipo (`?q=` filtra por título e `limit` corta) / cria com o primeiro bloco (`{"title", "text"}`) e já deixa o dono como `owner` |
-| `GET/PATCH/DELETE` | `/api/notes/{id}` | a nota com blocos e relações / renomeia (e a `position`) — só o dono / apaga — só o dono, levando blocos, vínculos, tags, o compartilhamento e o espelho do Drive daquela conta |
+| `GET/PATCH/DELETE` | `/api/notes/{id}` | a nota com blocos e relações / renomeia (e a `position`) — só o dono / apaga — só o dono, levando blocos, vínculos, tags, o compartilhamento |
 | `GET` | `/api/notes/{id}/related` | relações, menções de saída e backlinks da nota |
 | `POST/DELETE` | `/api/notes/{id}/relations[/{relation_id}]` | cria (idempotente, com rótulo) / remove relação entre notas |
 | `POST/DELETE` | `/api/notes/{id}/tags/{tag_id}` | aplica/remove tag da nota |
@@ -422,10 +376,3 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono. `415` para tipo/extensão recusada e `503` quando o Storage do Appwrite não responde |
 | `GET` | `/media/{arquivo}` | serve o arquivo para o dono e para quem alcança uma nota que o cita; qualquer outro recebe `404`. PDF sai `inline` (o modal o emoldura e o navegador desenha); o resto, `attachment` |
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
-| `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
-| `POST` | `/api/drive/client-file` | recebe o JSON do cliente OAuth (multipart `file`) |
-| `POST` | `/api/drive/connect` | devolve a URL de consentimento do Google (a tela abre numa aba nova) |
-| `POST` | `/api/drive/connect/code` | troca pelo token o que o usuário colou de volta (a URL de retorno ou o `code`) |
-| `POST` | `/api/drive/disconnect` | esquece token e ids em cache; não toca em nada no Drive |
-| `PATCH` | `/api/drive/settings` | `{"auto_sync": true\|false}` |
-| `POST` | `/api/drive/sync` | exporta agora e devolve o resumo (`409` se não conectado ou já rodando). O `403` do Google por API desligada no projeto vira uma frase com o link para ligá-la |

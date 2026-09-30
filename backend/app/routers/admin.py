@@ -12,7 +12,7 @@ from typing import Any
 from appwrite.exception import AppwriteException
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from .. import drive, events
+from .. import events
 from ..deps import admin_user, get_db
 from ..schemas import (
     AdminPasswordIn,
@@ -345,9 +345,9 @@ def purge_user(db: Store, user_id: int) -> None:
     4. vínculos (`note_relations`, por origem e por destino);
     5. `note_tags` por nota e por tag (uma linha sobrevivente apontando para uma tag apagada seria
        órfã);
-    6. blocos, depois notas (e o espelho de `drive_files` de cada nota, por conta);
+    6. blocos, depois notas;
     7. as tags do dono;
-    8. eventos, sessões e `drive_state` da conta, e os arquivos de token em disco.
+    8. eventos e as sessões da conta.
 
     Idempotente: cada passo tolera o que já não existe (delete de ausente é `False`, `delete_where`
     devolve 0), então repetir a chamada termina igual.
@@ -384,15 +384,11 @@ def purge_user(db: Store, user_id: int) -> None:
     for note_id in note_ids:
         documents.remove("notes", note_id, owner_id=user_id)
         # O espelho é por conta: sai só o de quem está indo embora (o do colega que fica continua
-        # valendo, senão o Drive dele ganharia cópia repetida).
-        db.delete("drive_files", documents.drive_file_id(user_id, note_id))
     for tag_id in tag_ids:
         documents.remove("tags", tag_id, owner_id=user_id)
 
     db.delete_where("events", [equal("user_id", str(user_id))])
     _drop_sessions(db, user_id)
-    db.delete_where("drive_state", [equal("user_id", str(user_id))])
-    drive.forget_files(user_id)
     # A foto de quem ficou mudou (o membro saiu, o papel trocou de mão) e nenhuma das escritas
     # acima é do tipo que invalida sozinha: o TTL curto não pode devolver a nota antiga.
     for other_id in sorted(affected):
@@ -403,7 +399,7 @@ def purge_user(db: Store, user_id: int) -> None:
 def delete_user(
     user_id: int, db: Store = Depends(get_db), admin: Row = Depends(admin_user)
 ) -> Response:
-    """Leva junto tudo que é da conta: cadernos, notas, blocos, arquivos e o rastro no Drive."""
+    """Leva junto tudo que é da conta: notas, blocos, tags e arquivos."""
     user = _load(db, user_id)
     if user.id == admin.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você não pode apagar a própria conta")

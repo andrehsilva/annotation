@@ -13,10 +13,6 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
 
-# Onde ficam as coisas que ainda são arquivo: os tokens do Google Drive de cada usuário.
-DATA_DIR = Path(os.environ.get("CADERNO_DATA_DIR", BACKEND_DIR / "data")).resolve()
-
-
 def load_env_file(path: Path | None = None) -> None:
     """Não sobrescreve o que já veio do ambiente: o systemd ganha do arquivo."""
     target = path or ENV_FILE

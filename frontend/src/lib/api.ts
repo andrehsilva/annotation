@@ -3,8 +3,6 @@ import type {
   Block,
   BlockListItem,
   BlockType,
-  DriveConnect,
-  DriveStatus,
   EventFeed,
   Group,
   GroupDetail,
@@ -17,7 +15,6 @@ import type {
   Role,
   SearchResults,
   Stats,
-  SyncSummary,
   Tag,
   TagUsage,
   User,
@@ -155,20 +152,6 @@ export const api = {
     body.append("file", file);
     return request<MediaUpload>("/api/media", { method: "POST", body });
   },
-
-  driveStatus: () => request<DriveStatus>("/api/drive/status"),
-  driveUploadClient: (file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return request<DriveStatus>("/api/drive/client-file", { method: "POST", body });
-  },
-  driveConnect: () => request<DriveConnect>("/api/drive/connect", { method: "POST" }),
-  driveConnectCode: (callback: string) =>
-    request<DriveStatus>("/api/drive/connect/code", { method: "POST", ...json({ callback }) }),
-  driveDisconnect: () => request<void>("/api/drive/disconnect", { method: "POST" }),
-  driveSync: () => request<SyncSummary>("/api/drive/sync", { method: "POST" }),
-  driveSetAutoSync: (enabled: boolean) =>
-    request<DriveStatus>("/api/drive/settings", { method: "PATCH", ...json({ auto_sync: enabled }) }),
 
   search: (query: string) =>
     request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),

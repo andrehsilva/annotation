@@ -277,42 +277,6 @@ class Stats(BaseModel):
     counts: dict[str, int]
 
 
-class SyncSummary(BaseModel):
-    notes_sent: int
-    notes_unchanged: int
-    folders_created: int
-    media_sent: int
-    skipped_media: int
-    errors: list[str]
-    at: str
-
-
-class DriveStatus(BaseModel):
-    connected: bool
-    has_client_file: bool
-    auto_sync: bool
-    pending: bool
-    last_sync_at: str | None = None
-    last_summary: SyncSummary | None = None
-    last_error: str | None = None
-
-
-class DriveSettings(BaseModel):
-    auto_sync: bool
-
-
-class DriveConnectOut(BaseModel):
-    """A tela de consentimento do Google, que a tela abre numa aba nova."""
-
-    url: str
-
-
-class DriveCallbackIn(BaseModel):
-    """O que o usuário colou de volta: a URL da página de retorno ou só o código."""
-
-    callback: str = Field(min_length=8, max_length=8000)
-
-
 class EventOut(ORMModel):
     id: int
     action: str

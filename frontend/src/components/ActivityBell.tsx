@@ -61,7 +61,7 @@ function describe(event: ActivityEvent): string {
 /**
  * A página de atividade: as últimas interações, abertas pelo item **Atividade** do menu do nome.
  *
- * Só o painel mora aqui — o gatilho é uma linha do menu, ao lado de Admin, Drive e Sair, e o painel
+ * Só o painel mora aqui — o gatilho é o sino do cabeçalho, e o painel
  * se ancora no canto direito do cabeçalho (o `anchor`), longe do popover que acabou de fechar.
  */
 export function ActivityPanel({ feed, open, anchor, onOpenChange, onAllRead }: ActivityPanelProps) {

@@ -1,74 +1,56 @@
-import { Trash } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 
-import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER } from "../lib/format";
-import type { Stats, TagUsage } from "../lib/types";
+import type { TagUsage } from "../lib/types";
 import { EmptyState } from "./ui";
 
 interface TagsViewProps {
   tags: TagUsage[];
-  stats: Stats | null;
   onOpenTag: (name: string) => void;
   onDeleteTag: (tagId: number) => void;
 }
 
-export function TagsView({ tags, stats, onOpenTag, onDeleteTag }: TagsViewProps) {
+/**
+ * As tags da conta, como chips: clicar filtra a lista de notas; o **×** apaga a tag.
+ *
+ * A tela não repete os contadores do cabeçalho (eles já estão no topo, em todas as telas) nem a
+ * contagem por tag: o que importa aqui é a tag em si, no mesmo formato em que ela aparece na nota.
+ */
+export function TagsView({ tags, onOpenTag, onDeleteTag }: TagsViewProps) {
   return (
     <div className="view">
-      <header className="view-head">
-        <div className="view-head-main">
-          <h1 className="view-title">Tags</h1>
-          <p className="view-lede">
-            Tags atravessam notas. Clique numa tag para filtrar a lista de notas (ela
-            abre se estiver escondida); use Ctrl+Espaço dentro de uma nota para criar e aplicar sem
-            sair do teclado.
-          </p>
-        </div>
-        <div className="view-head-side">
-          {stats && (
-            <div className="note-counts is-large">
-              {KIND_ORDER.map((kind) => {
-                const KindIcon = KIND_ICONS[kind];
-                return (
-                  <span className="count-chip" key={kind} title={`${stats.counts[kind]} ${KIND_LABELS[kind]}`}>
-                    <KindIcon size={13} weight="bold" />
-                    {stats.counts[kind]}
-                    <em>{KIND_LABELS[kind]}</em>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
+      <header className="kind-head">
+        <h1 className="view-title">Tags</h1>
+        <p className="view-lede">
+          Clique numa tag para filtrar a lista de notas (ela abre se estiver escondida); dentro de uma
+          nota, <kbd className="keycap">#</kbd> cria e aplica sem sair do teclado.
+        </p>
       </header>
 
-      <section className="panel">
-        {tags.length === 0 ? (
-          <EmptyState
-            title="Nenhuma tag"
-            hint="Abra uma nota e pressione Ctrl+Espaço para criar a primeira."
-          />
-        ) : (
-          <ul className="tag-table">
-            {tags.map((tag) => (
-              <li className="tag-row-item" key={tag.id}>
-                <button type="button" className="link" onClick={() => onOpenTag(tag.name)}>
-                  {tag.name}
-                </button>
-                <span className="tag-meta">{tag.notes_count} notas</span>
-                <button
-                  type="button"
-                  className="icon-btn is-tiny"
-                  onClick={() => onDeleteTag(tag.id)}
-                  aria-label={`Apagar tag ${tag.name}`}
-                >
-                  <Trash size={13} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {tags.length === 0 ? (
+        <EmptyState
+          title="Nenhuma tag"
+          hint="Dentro de uma nota, digite # num bloco vazio para criar a primeira."
+        />
+      ) : (
+        <div className="tag-cloud is-page">
+          {tags.map((tag) => (
+            <span className="tag-chip is-attached" key={tag.id}>
+              <button type="button" className="link" onClick={() => onOpenTag(tag.name)}>
+                {tag.name}
+              </button>
+              <button
+                type="button"
+                className="tag-chip-remove"
+                onClick={() => onDeleteTag(tag.id)}
+                title={`Apagar a tag ${tag.name}`}
+                aria-label={`Apagar tag ${tag.name}`}
+              >
+                <X size={11} weight="bold" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

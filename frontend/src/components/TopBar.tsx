@@ -1,4 +1,4 @@
-import { Bell, CloudArrowUp, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { Bell, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,7 +17,6 @@ interface TopBarProps {
   stats: Stats | null;
   theme: "dark" | "light";
   user: User;
-  driveConnected: boolean;
   feed: EventFeed | null;
   bellOpen: boolean;
   onToggleTheme: () => void;
@@ -25,7 +24,6 @@ interface TopBarProps {
   onHome: () => void;
   onOpenSearch: () => void;
   onToggleSidebar: () => void;
-  onOpenDrive: () => void;
   onOpenAdmin: () => void;
   onOpenWelcome: () => void;
   onLogout: () => void;
@@ -42,7 +40,6 @@ export function TopBar({
   stats,
   theme,
   user,
-  driveConnected,
   feed,
   bellOpen,
   onToggleTheme,
@@ -50,7 +47,6 @@ export function TopBar({
   onHome,
   onOpenSearch,
   onToggleSidebar,
-  onOpenDrive,
   onOpenAdmin,
   onOpenWelcome,
   onLogout,
@@ -396,19 +392,6 @@ export function TopBar({
                   Admin: usuários e grupos
                 </button>
               )}
-              <button
-                type="button"
-                role="menuitem"
-                className="user-popover-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onOpenDrive();
-                }}
-              >
-                <CloudArrowUp size={14} weight="bold" />
-                Backup no Drive
-                <span className="user-popover-hint">{driveConnected ? "ligado" : "desligado"}</span>
-              </button>
               <span className="user-popover-sep" aria-hidden="true" />
               <button
                 type="button"

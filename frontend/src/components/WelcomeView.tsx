@@ -1,6 +1,5 @@
 import {
   Check,
-  CloudArrowUp,
   Keyboard,
   NoteBlank,
   Sparkle,
@@ -69,18 +68,6 @@ const STEPS: Step[] = [
       </>
     ),
   },
-  {
-    key: "drive",
-    icon: CloudArrowUp,
-    title: "Backup e contas",
-    body: (
-      <>
-        O botão do Drive, no menu do seu nome, exporta as notas em Markdown para a sua conta Google.
-        Ali também ficam <strong>Atividade</strong>, <strong>Trocar senha</strong> e — para o admin —{" "}
-        <strong>Admin</strong>, com contas e grupos.
-      </>
-    ),
-  },
 ];
 
 /**
@@ -99,7 +86,7 @@ export function WelcomeView({ user, onDismiss }: { user: User; onDismiss: () => 
           Boas-vindas, {user.display_name || user.email}
         </h1>
         <p className="view-lede">
-          Um caderno de anotações para devs. Em cinco cartões, o que o app faz — e o botão do fim
+          Um caderno de anotações para devs. Em quatro cartões, o que o app faz — e o botão do fim
           decide se esta tela volta.
         </p>
       </header>

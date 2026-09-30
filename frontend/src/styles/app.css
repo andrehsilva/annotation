@@ -1277,6 +1277,28 @@ iframe.element-media {
   gap: 10px;
 }
 
+/* As tags da página Tags: a mesma nuvem da lateral, agora com espaço para crescer. */
+.tag-cloud.is-page {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+}
+
+.tag-cloud.is-page .tag-chip {
+  padding: 5px 6px 5px 10px;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.tag-cloud.is-page .link {
+  color: inherit;
+}
+
+.tag-cloud.is-page .tag-chip-remove:hover {
+  color: var(--danger);
+}
+
 /* A lista de atalhos (Ctrl+/): uma linha por atalho, com as teclas à esquerda. */
 .shortcut-group + .shortcut-group {
   margin-top: 12px;

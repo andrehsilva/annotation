@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from .. import acl, deps, events, links, services
-from ..markdown import UNTITLED
+from ..values import UNTITLED
 from ..schemas import (
     BlockIn,
     BlockOut,
@@ -184,7 +184,6 @@ def delete_note(
         db.delete_where("blocks", [equal("note_id", str(note_id))])
         db.delete_where("note_members", [equal("note_id", str(note_id))])
         db.delete_where("note_groups", [equal("note_id", str(note_id))])
-        documents.remove("drive_files", documents.drive_file_id(user.id, note_id))
         documents.remove("notes", note_id, owner_id=user.id)
         store().stage(tx, [events.operation(user.id, "deleted", "note", title, note_id=note_id)])
     return Response(status_code=status.HTTP_204_NO_CONTENT)

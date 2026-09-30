@@ -4,7 +4,6 @@ import { AdminView } from "./components/AdminView";
 import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import type { ConfirmRequest } from "./components/ConfirmDialog";
-import { DrivePanel } from "./components/DrivePanel";
 import { KindView } from "./components/KindView";
 import { ImageModal } from "./components/ImageModal";
 import type { ImagePreview } from "./components/ImageModal";
@@ -28,7 +27,6 @@ import { noteMatches } from "./lib/format";
 import { useTheme } from "./lib/theme";
 import type {
   BlockType,
-  DriveStatus,
   EventFeed,
   Note,
   NoteSummary,
@@ -68,8 +66,6 @@ export default function App() {
   const [filter, setFilter] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
-  const [driveOpen, setDriveOpen] = useState(false);
-  const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
   const [feed, setFeed] = useState<EventFeed | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
   const [image, setImage] = useState<ImagePreview | null>(null);
@@ -110,7 +106,6 @@ export default function App() {
     setStats(null);
     setNote(null);
     setAnchorBlock(null);
-    setDriveStatus(null);
     setPasswordOpen(false);
     // O próximo login busca o feed dele e pode abrir o painel uma vez.
     setFeed(null);
@@ -122,7 +117,6 @@ export default function App() {
     setPdf(null);
     setSearchOpen(false);
     setShortcutsOpen(false);
-    setDriveOpen(false);
     setReady(false);
   }, []);
 
@@ -154,20 +148,6 @@ export default function App() {
     setStats(workspaceStats);
     return list;
   }, []);
-
-  /** The Drive panel is not polled: it refreshes when it opens and after each action. */
-  const refreshDriveStatus = useCallback(async () => {
-    try {
-      setDriveStatus(await api.driveStatus());
-    } catch (error) {
-      report(error);
-    }
-  }, [report]);
-
-  const openDrive = useCallback(() => {
-    setDriveOpen(true);
-    void refreshDriveStatus();
-  }, [refreshDriveStatus]);
 
   /** O feed do sino não é polled: uma busca por carga de workspace, e outra a cada abertura. */
   const loadEvents = useCallback(async (): Promise<EventFeed | null> => {
@@ -268,7 +248,6 @@ export default function App() {
         if (!cancelled) setReady(true);
       }
     })();
-    void refreshDriveStatus();
     void loadEvents().then((next) => {
       if (cancelled || !next) return;
       // Só abre sozinho quando há interação para mostrar, e só na primeira vez do login.
@@ -282,25 +261,7 @@ export default function App() {
     };
     // `user.id` e não `user`: marcar a introdução troca o objeto sem que o login tenha mudado,
     // e o fluxo de entrada não pode rodar de novo por causa disso.
-  }, [user?.id, openNote, refreshDriveStatus, refreshWorkspace, report, loadEvents]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      if (key === "k") {
-        event.preventDefault();
-        setSearchOpen(true);
-      }
-      // `Ctrl+/` (e o `Ctrl+Shift+7`, que é o mesmo `?` de alguns teclados) abre a lista de atalhos.
-      if (key === "/" || event.code === "Slash") {
-        event.preventDefault();
-        setShortcutsOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [user?.id, openNote, refreshWorkspace, report, loadEvents]);
 
   /** Block edits change counters everywhere, so refresh the chrome after each mutation. */
   const syncAfterEdit = useCallback(async () => {
@@ -326,6 +287,29 @@ export default function App() {
     },
     [notify, openNote, refreshWorkspace, report],
   );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+      // `Ctrl+/` (e o `Ctrl+Shift+7`, que é o mesmo `?` de alguns teclados) abre a lista de atalhos.
+      if (key === "/" || event.code === "Slash") {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+      }
+      // `Ctrl+Alt+N` cria uma nota: `Ctrl+N` e `Ctrl+Shift+N` são do navegador (janela e anônima).
+      if (event.altKey && key === "n") {
+        event.preventDefault();
+        void createNote();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createNote]);
 
   const deleteNote = useCallback(
     (id: number) => {
@@ -511,12 +495,7 @@ export default function App() {
     }
     if (view.kind === "tags") {
       return (
-        <TagsView
-          tags={tags}
-          stats={stats}
-          onOpenTag={openTag}
-          onDeleteTag={deleteTag}
-        />
+        <TagsView tags={tags} onOpenTag={openTag} onDeleteTag={deleteTag} />
       );
     }
     if (view.kind === "relations") {
@@ -546,13 +525,11 @@ export default function App() {
         stats={stats}
         theme={theme}
         user={user}
-        driveConnected={driveStatus?.connected ?? false}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onNavigate={setView}
         onHome={() => setView({ kind: "notes" })}
         onOpenSearch={() => setSearchOpen(true)}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
-        onOpenDrive={openDrive}
         onOpenAdmin={() => setView({ kind: "admin" })}
         onOpenWelcome={() => setView({ kind: "welcome" })}
         onLogout={() => void logout()}
@@ -584,23 +561,6 @@ export default function App() {
         <CommandPalette onClose={() => setSearchOpen(false)} onNavigate={(hit) => void navigateHit(hit)} />
       )}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
-      {driveOpen && driveStatus && (
-        <DrivePanel
-          status={driveStatus}
-          onChanged={async (summary) => {
-            await refreshDriveStatus();
-            if (summary) {
-              notify(
-                `${summary.notes_sent} notas enviadas · ${summary.notes_unchanged} sem mudança`,
-                "success",
-              );
-            }
-          }}
-          onAskConfirm={askConfirm}
-          onClose={() => setDriveOpen(false)}
-          onError={report}
-        />
-      )}
       {passwordOpen && (
         <PasswordPanel onClose={() => setPasswordOpen(false)} onNotify={notify} />
       )}

@@ -36,7 +36,7 @@ def cookie_token(request: Request) -> str | None:
 
 
 def session_user_id(request: Request) -> int | None:
-    """Identidade para quem está fora do grafo de dependências — o middleware de sync do Drive."""
+    """Identidade de quem está fora do grafo de dependências (rotas que só leem o cookie)."""
     token = cookie_token(request)
     if token is None:
         return None

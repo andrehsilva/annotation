@@ -135,31 +135,6 @@ export interface MediaUpload {
   size: number;
 }
 
-export interface SyncSummary {
-  notes_sent: number;
-  notes_unchanged: number;
-  folders_created: number;
-  media_sent: number;
-  skipped_media: number;
-  errors: string[];
-  at: string;
-}
-
-/** A tela de consentimento do Google: a aba que a tela abre para o usuário autorizar. */
-export interface DriveConnect {
-  url: string;
-}
-
-export interface DriveStatus {
-  connected: boolean;
-  has_client_file: boolean;
-  auto_sync: boolean;
-  pending: boolean;
-  last_sync_at: string | null;
-  last_summary: SyncSummary | null;
-  last_error: string | null;
-}
-
 export type Role = "admin" | "user";
 
 /** Papel de uma conta dentro de uma nota: quem só lê, quem escreve, e o dono. */

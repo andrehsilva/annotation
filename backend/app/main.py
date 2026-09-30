@@ -13,12 +13,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import bootstrap, deps, sync
+from . import bootstrap, deps
 from .routers import (
     admin,
     auth,
     blocks,
-    drive,
     events,
     groups,
     media,
@@ -70,7 +69,6 @@ app.include_router(search.router)
 app.include_router(relations.router)
 app.include_router(events.router)
 app.include_router(groups.router)
-app.include_router(drive.router)
 
 
 @app.middleware("http")
@@ -83,21 +81,6 @@ async def refuse_foreign_origin(request: Request, call_next):
         if origin is not None and not same_host and origin not in ALLOWED_ORIGINS:
             return JSONResponse({"detail": "Origem não permitida"}, status_code=403)
     return await call_next(request)
-
-
-@app.middleware("http")
-async def schedule_sync_after_write(request: Request, call_next):
-    """Every successful write to /api reschedules that user's Drive export."""
-    response = await call_next(request)
-    if (
-        request.method != "GET"
-        and request.url.path.startswith("/api/")
-        and response.status_code < 400
-    ):
-        user_id = deps.session_user_id(request)
-        if user_id is not None:
-            sync.schedule_sync(user_id)
-    return response
 
 
 @app.get("/api/health")

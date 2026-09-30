@@ -11,9 +11,12 @@ from datetime import datetime, timezone
 # Uma nota mistura estes tipos livremente; a ordem importa (Alt+Espaço cicla por ela).
 BLOCK_TYPES: tuple[str, ...] = ("text", "code", "url", "image", "video", "pdf")
 
+# Rótulo de uma nota sem título, em qualquer tela.
+UNTITLED = "Nota sem título"
+
 ROLES: tuple[str, ...] = ("admin", "user")
 
-# Papéis de quem participa de um caderno, do mais fraco ao mais forte.
+# Papéis de quem participa de uma nota, do mais fraco ao mais forte.
 ROLE_RANK: dict[str, int] = {"viewer": 0, "editor": 1, "owner": 2}
 
 ACTIONS: tuple[str, ...] = (

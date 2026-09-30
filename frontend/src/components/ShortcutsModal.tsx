@@ -9,6 +9,7 @@ const GROUPS: { title: string; rows: { keys: string[]; what: string; where?: str
     title: "Em qualquer lugar",
     rows: [
       { keys: ["Ctrl", "K"], what: "Buscar em notas, blocos e tags" },
+      { keys: ["Ctrl", "Alt", "N"], what: "Nova nota" },
       { keys: ["Ctrl", "/"], what: "Esta lista de atalhos" },
       { keys: ["Esc"], what: "Fechar paletas, menus e modais" },
     ],

@@ -340,33 +340,6 @@ TABLE_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "drive_files",
-        "name": "Arquivos no Drive",
-        # rowId = "<user_id>_<note_id>": o espelho é de **cada conta**. Com a nota compartilhada,
-        # o rowId só pela nota fazia dois membros disputarem a mesma linha — o segundo encontrava a
-        # linha do primeiro e concluía que a nota dele já estava no Drive.
-        "columns": [
-            col("user_id", "string", True, 36),
-            col("file_id", "string", size=64),
-            col("folder_id", "string", size=64),
-            col("drive_path", "string", size=400),
-            col("checksum", "string", size=64),
-            col("synced_at", "datetime"),
-        ],
-        "indexes": [{"key": "idx_drive_files_user", "type": "key", "columns": ["user_id"]}],
-    },
-    {
-        "id": "drive_state",
-        "name": "Estado do export",
-        # rowId = "<user_id>_<key>"
-        "columns": [
-            col("user_id", "string", True, 36),
-            col("key", "string", True, 40),
-            col("value", "string", size=4000),
-        ],
-        "indexes": [{"key": "idx_drive_state_user", "type": "key", "columns": ["user_id"]}],
-    },
-    {
         "id": "counters",
         "name": "Contadores de id",
         # rowId = nome do contador ("note", "block", ...). Avança com incrementRowColumn.

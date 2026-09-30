@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import Iterable, Literal
 
 from . import acl
-from .markdown import UNTITLED
+from .values import UNTITLED
 from .schemas import (
     Backlink,
     NoteOut,

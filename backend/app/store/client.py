@@ -536,7 +536,7 @@ class Store:
     ) -> dict[str, list[dict[str, Any]]]:
         """Relê só as tabelas sujas, na mesma ordem de dependência da carga completa.
 
-        Tabelas que não fazem parte da foto (contadores, eventos, espelho do Drive) não têm o que
+        Tabelas que não fazem parte da foto (contadores, eventos) não têm o que
         reler. Quando a lista de ids de nota muda, o que sai dela também volta: sem isso uma nota
         nova não apareceria, porque o `page_in` das ondas seguintes sai da foto.
         """
