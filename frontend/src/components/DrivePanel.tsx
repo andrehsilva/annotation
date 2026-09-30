@@ -191,7 +191,7 @@ export function DrivePanel({ status, onChanged, onAskConfirm, onClose, onError }
           <>
             <p className="panel-hint">
               O AnotAI cria a pasta <b>NotAI</b> no seu Drive (o nome da pasta não mudou), uma
-              subpasta por caderno e um arquivo .md por nota. Nada é lido nem apagado no Drive.
+              um arquivo .md por nota, com a mídia numa pasta `_media`. Nada é lido nem apagado no Drive.
             </p>
             <ol className="drive-steps">
               <li>

@@ -11,15 +11,15 @@ import { EmptyState, Spinner } from "./ui";
 
 interface KindViewProps {
   blockType: BlockType;
-  onOpenNote: (notebookId: number, noteId: number, blockId: number) => void;
+  onOpenNote: (noteId: number, blockId: number) => void;
   onOpenImage: (image: ImagePreview) => void;
   onOpenPdf: (pdf: PdfPreview) => void;
   onError: (error: unknown) => void;
 }
 
 const HINTS: Record<BlockType, string> = {
-  text: "Tudo que você escreveu correndo, de todos os cadernos. Clique para abrir a nota no bloco.",
-  code: "Todos os snippets, de todos os cadernos. Clique para abrir a nota no bloco.",
+  text: "Tudo que você escreveu correndo, de todas as notas. Clique para abrir a nota no bloco.",
+  code: "Todos os snippets, de todas as notas. Clique para abrir a nota no bloco.",
   url: "Todos os links. Clique para abrir o site em outra aba, ou vá para a nota.",
   image: "Todas as imagens. Clique para abrir em modal, no tamanho real, ou vá para a nota.",
   video: "Todos os vídeos, tocando direto na lista. Use o botão para ir à nota.",
@@ -49,14 +49,11 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onOpenPdf, onErro
   if (items === null) return <Spinner label={`Carregando ${KIND_LABELS[blockType]}...`} />;
 
   const grid = blockType === "image" || blockType === "video";
-  const openNote = (item: BlockListItem) => onOpenNote(item.notebook_id, item.note_id, item.id);
+  const openNote = (item: BlockListItem) => onOpenNote(item.note_id, item.id);
 
   const footer = (item: BlockListItem) => (
     <div className="element-foot">
-      <span className="element-source">
-        {item.notebook_title} <span className="element-arrow">›</span>{" "}
-        {item.note_title || "nota sem título"}
-      </span>
+      <span className="element-source">{item.note_title || "nota sem título"}</span>
       {item.author && (
         <span className="element-author" title={`Escrito por ${item.author}`}>
           por {item.author}
@@ -146,7 +143,7 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onOpenPdf, onErro
                     }
                     title="Abrir no tamanho real"
                   >
-                    <img className="element-media" src={video} alt={item.caption || item.notebook_title} />
+                    <img className="element-media" src={video} alt={item.caption || item.note_title} />
                   </button>
                 ) : blockType === "video" ? (
                   <div className="element-body">

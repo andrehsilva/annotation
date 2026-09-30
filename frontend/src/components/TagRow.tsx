@@ -8,7 +8,7 @@ interface TagRowProps {
   all: TagUsage[];
   onToggle: (tag: Tag, attached: boolean) => void;
   onCreate: (name: string) => Promise<Tag | null>;
-  /** Num caderno de que só se lê (papel `viewer`), a linha vira só os chips. */
+  /** Numa nota de que só se lê (papel `viewer`), a linha vira só os chips. */
   readOnly?: boolean;
 }
 

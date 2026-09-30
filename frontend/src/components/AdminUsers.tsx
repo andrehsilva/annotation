@@ -108,7 +108,7 @@ export function AdminUsers({ user, onError, onNotify, onAskConfirm }: AdminUsers
   const remove = (entry: AdminUser) =>
     onAskConfirm({
       title: "Excluir usuário",
-      message: `"${entry.email}" leva junto os cadernos, as notas e os arquivos enviados. Não dá para desfazer.`,
+      message: `"${entry.email}" leva junto as notas, os blocos e os arquivos enviados. Não dá para desfazer.`,
       confirmLabel: "Excluir usuário",
       danger: true,
       action: async () => {
@@ -233,7 +233,6 @@ export function AdminUsers({ user, onError, onNotify, onAskConfirm }: AdminUsers
                     <td className="admin-name">{entry.display_name || "—"}</td>
                     <td className="admin-email">{entry.email}</td>
                     <td>{ROLE_LABELS[entry.role]}</td>
-                    <td>{entry.notebooks}</td>
                     <td>{entry.notes}</td>
                     <td>{entry.blocks}</td>
                     <td>{formatBytes(entry.media_bytes)}</td>

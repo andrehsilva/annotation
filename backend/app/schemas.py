@@ -32,7 +32,6 @@ class TagOut(ORMModel):
 
 
 class TagUsage(TagOut):
-    notebooks_count: int
     notes_count: int
 
 
@@ -105,26 +104,12 @@ class BlockListItem(BaseModel):
     updated_at: UTCDateTime
     note_id: int
     note_title: str
-    notebook_id: int
-    notebook_title: str
-
-
-class NoteOut(ORMModel):
-    id: int
-    notebook_id: int
-    title: str
-    position: int
-    created_at: UTCDateTime
-    updated_at: UTCDateTime
-    tags: list[TagOut]
-    blocks: list[BlockOut]
-    relations: list[NoteRelationOut] = []
 
 
 class NoteSummary(ORMModel):
+    """Uma nota na lista: é a unidade do app — tem dono, papel e compartilhamento próprios."""
+
     id: int
-    notebook_id: int
-    notebook_title: str
     title: str
     position: int
     created_at: UTCDateTime
@@ -132,6 +117,21 @@ class NoteSummary(ORMModel):
     tags: list[TagOut]
     counts: dict[str, int]
     excerpt: str
+    # Quantos vínculos (declarados ou citações) tocam esta nota.
+    relations_count: int = 0
+    # Compartilhamento: o papel de quem pediu (owner/editor/viewer), de quem é a nota e, para o dono,
+    # com que grupos ela saiu daqui.
+    role: str = "owner"
+    owner_id: int
+    owner_name: str = ""
+    shared: bool = False
+    shared_groups: list[str] = []
+    shared_people: int = 0
+
+
+class NoteOut(NoteSummary):
+    blocks: list[BlockOut]
+    relations: list[NoteRelationOut] = []
 
 
 class NoteIn(BaseModel):
@@ -142,11 +142,6 @@ class NoteIn(BaseModel):
 class NotePatch(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     position: int | None = None
-
-
-class NotebookRef(ORMModel):
-    id: int
-    title: str
 
 
 class RelationEdge(BaseModel):
@@ -160,17 +155,13 @@ class RelationEdge(BaseModel):
     target_id: int
     source_title: str
     target_title: str
-    source_notebook_id: int
-    target_notebook_id: int
 
 
 class RelatableNote(BaseModel):
-    """A note seen from another one: enough to label it, open it and place it in its notebook."""
+    """A note seen from another one: enough to label it and open it."""
 
     id: int
     title: str
-    notebook_id: int
-    notebook_title: str
 
 
 class NoteRelationOut(BaseModel):
@@ -199,43 +190,8 @@ class NoteRelated(BaseModel):
     backlinks: list[Backlink]
 
 
-class NotebookAffinity(BaseModel):
-    """A notebook reached through its notes, with how many note links cross over."""
-
-    notebook_id: int
-    title: str
-    links_count: int
-
-
-class NotebookSummary(ORMModel):
-    id: int
-    title: str
-    description: str
-    created_at: UTCDateTime
-    updated_at: UTCDateTime
-    tags: list[TagOut]
-    notes_count: int
-    counts: dict[str, int]
-    relations_count: int
-    # Compartilhamento: o papel de quem pediu (owner/editor/viewer), se o caderno é de outra conta e
-    # quem é o dono. A tela usa isto para marcar o caderno e esconder o que não é seu.
-    role: str = "owner"
-    owner_id: int
-    owner_name: str = ""
-    shared: bool = False
-    # O outro lado do `shared`: o caderno é **desta** conta e está aberto para estes grupos, que levam
-    # `shared_people` contas até ele. É o que diz ao dono qual dos cadernos dele saiu daqui.
-    shared_groups: list[str] = []
-    shared_people: int = 0
-
-
-class NotebookOut(NotebookSummary):
-    notes: list[NoteSummary]
-    affinity: list[NotebookAffinity]
-
-
-class NotebookMemberOut(BaseModel):
-    """Quem alcança o caderno: o dono, os membros diretos e os que vêm por grupo."""
+class NoteMemberOut(BaseModel):
+    """Quem alcança a nota: o dono, os membros diretos e os que vêm por grupo."""
 
     user_id: int
     display_name: str
@@ -245,27 +201,27 @@ class NotebookMemberOut(BaseModel):
     groups: list[str] = []
 
 
-class NotebookGroupIn(BaseModel):
+class NoteGroupIn(BaseModel):
     role: str = "editor"
 
 
-class NotebookSharingOut(BaseModel):
-    """O painel de compartilhar: quem alcança, com qual grupo e com quais eu posso compartilhar."""
-
-    role: str
-    can_share: bool
-    members: list[NotebookMemberOut]
-    groups: list[NotebookGroupOut]
-    available: list[GroupOut]
-
-
-class NotebookGroupOut(BaseModel):
-    """Um grupo do caderno, como o painel de compartilhar mostra."""
+class NoteGroupOut(BaseModel):
+    """Um grupo da nota, como o painel de compartilhar mostra."""
 
     group_id: int
     name: str
     role: str
     members: int
+
+
+class NoteSharingOut(BaseModel):
+    """O painel de compartilhar: quem alcança, com qual grupo e com quais eu posso compartilhar."""
+
+    role: str
+    can_share: bool
+    members: list[NoteMemberOut]
+    groups: list[NoteGroupOut]
+    available: list[GroupOut]
 
 
 class GroupOut(BaseModel):
@@ -301,9 +257,8 @@ class MediaOut(BaseModel):
 
 
 class SearchHit(BaseModel):
-    kind: Literal["notebook", "note", "block", "tag"]
+    kind: Literal["note", "block", "tag"]
     id: int
-    notebook_id: int | None = None
     note_id: int | None = None
     title: str
     snippet: str
@@ -315,7 +270,6 @@ class SearchResults(BaseModel):
 
 
 class Stats(BaseModel):
-    notebooks: int
     notes: int
     blocks: int
     tags: int
@@ -433,7 +387,6 @@ class AdminPasswordIn(BaseModel):
 
 
 class AdminUserOut(UserOut):
-    notebooks: int
     notes: int
     blocks: int
     media_bytes: int

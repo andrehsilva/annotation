@@ -7,6 +7,7 @@ usuário). `documents.py` traduz linha ↔ modelo antigo e concentra as escritas
 from . import documents  # noqa: F401
 from .client import (  # noqa: F401
     BUCKET_ID,
+    IN_VALUES,
     DATABASE_ID,
     SERVER_ONLY,
     Conflict,
@@ -23,4 +24,4 @@ from .client import (  # noqa: F401
     store,
 )
 
-__all__ = ["store", "documents", "Store", "Conflict", "q", "equal", "limit", "order_asc", "order_desc"]
+__all__ = ["store", "documents", "Store", "Conflict", "q", "equal", "limit", "order_asc", "order_desc", "IN_VALUES"]

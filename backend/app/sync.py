@@ -53,7 +53,6 @@ API_NOT_ENABLED = "has not been used in project"
 # Dropped on disconnect: everything cached about the Drive tree of the account we left.
 CONNECTION_KEYS = (
     "root_folder_id",
-    "notebook_folders",
     "media_folder_id",
     "media_files",
     "last_sync_at",
@@ -246,15 +245,12 @@ def export_notes(db: Store, user_id: int) -> SyncSummary:
 def _export(db: Store, user_id: int) -> SyncSummary:
     service = drive.service(user_id)
     photo = _photo(db, user_id)
-    notebooks = _notebooks(db, photo)
     notes = photo["notes"]
     blocks = _blocks_by_note(photo["blocks"])
     tags = _tag_names(photo)
 
     root_id, created = _ensure_root(service, db, user_id)
     folders_created = int(created)
-    folders, created = _notebook_folders(service, db, user_id, root_id, notebooks)
-    folders_created += created
 
     names = _file_names(notes)
     media_links, media_sent, skipped_media, errors = _media(service, db, user_id, root_id, photo)
@@ -263,17 +259,14 @@ def _export(db: Store, user_id: int) -> SyncSummary:
     notes_sent = 0
     notes_unchanged = 0
     for note in notes:
-        notebook = notebooks.get(note.notebook_id)
-        folder = folders.get(note.notebook_id)
-        if notebook is None or folder is None:  # the notebook went away mid-run
-            continue
+        # Sem caderno não há subpasta: cada nota é um `.md` na raiz `NotAI`.
+        folder = {"id": root_id}
         filename = names[note.id]
-        path = f"{folder['name']}/{filename}"
+        path = filename
         related, mentions = links.get(note.id, ((), ()))
         markdown = note_markdown(
             note,
             blocks.get(note.id, []),
-            notebook_title=notebook.title,
             tags=tags.get(note.id, []),
             media_links=media_links,
             related=related,
@@ -357,19 +350,6 @@ def _photo(db: Store, user_id: int) -> Photo:
     }
 
 
-def _notebooks(db: Store, photo: Photo) -> dict[int, Row]:
-    """Todo caderno legível; o snapshot traz só os próprios, o compartilhado vem por id."""
-    known = {row.id: row for row in photo["notebooks"]}
-    wanted = {row.notebook_id for row in photo["notes"]} | {
-        documents.to_int(row["notebook_id"]) for row in photo["notebook_members"]
-    }
-    for notebook_id in sorted(wanted - known.keys()):
-        row = documents.get("notebooks", notebook_id)
-        if row is not None:
-            known[notebook_id] = row
-    return known
-
-
 def _blocks_by_note(rows: Iterable[Row]) -> dict[int, list[Row]]:
     """Blocos por nota na ordem do editor: é ela que dá o mesmo markdown (e o mesmo checksum)."""
     grouped: dict[int, list[Row]] = defaultdict(list)
@@ -422,14 +402,12 @@ def _link_titles(photo: Photo) -> dict[int, tuple[list[str], list[str]]]:
 
 
 def _file_names(notes: Sequence[Row]) -> dict[int, str]:
-    """One deterministic file name per note; equal stems in a notebook both get their id."""
+    """Um nome determinístico por nota; títulos iguais ganham o id para não se sobrescreverem."""
     stems = {note.id: file_stem(note.title, f"nota-{note.id}") for note in notes}
-    shared = Counter((note.notebook_id, stems[note.id]) for note in notes)
+    shared = Counter(stems[note.id] for note in notes)
     return {
         note.id: (
-            f"{stems[note.id]} ({note.id}).md"
-            if shared[(note.notebook_id, stems[note.id])] > 1
-            else f"{stems[note.id]}.md"
+            f"{stems[note.id]} ({note.id}).md" if shared[stems[note.id]] > 1 else f"{stems[note.id]}.md"
         )
         for note in notes
     }
@@ -445,27 +423,6 @@ def _ensure_root(service, db: Store, user_id: int) -> tuple[str, bool]:
     folder_id = _create_folder(service, ROOT_FOLDER, None)
     _set(db, user_id, "root_folder_id", folder_id)
     return folder_id, True
-
-
-def _notebook_folders(
-    service, db: Store, user_id: int, root_id: str, notebooks: dict[int, Row]
-) -> tuple[dict[int, dict[str, str]], int]:
-    """Folder per readable notebook, keyed by notebook id so renaming keeps the same folder."""
-    known: dict[str, dict[str, str]] = _json_state(db, user_id, "notebook_folders", {})  # type: ignore[assignment]
-    created = 0
-    for notebook_id, notebook in sorted(notebooks.items()):
-        name = file_stem(notebook.title, f"caderno-{notebook_id}")
-        entry = known.get(str(notebook_id))
-        if entry is None:
-            known[str(notebook_id)] = {"id": _create_folder(service, name, root_id), "name": name}
-            created += 1
-        elif entry.get("name") != name:
-            service.files().update(
-                fileId=entry["id"], body={"name": name}, fields="id"
-            ).execute()
-            entry["name"] = name
-    _set(db, user_id, "notebook_folders", json.dumps(known))
-    return {int(key): value for key, value in known.items()}, created
 
 
 def _ensure_media_folder(service, db: Store, user_id: int, root_id: str) -> str:

@@ -1,9 +1,9 @@
-import { ArrowsDownUp, ArrowLeft } from "@phosphor-icons/react";
+import { ArrowsDownUp, ArrowLeft, Trash, UsersThree } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import { KIND_ICONS } from "../lib/kinds";
-import { KIND_LABELS, KIND_ORDER, isBlank, isForeignBlock } from "../lib/format";
+import { KIND_LABELS, KIND_ORDER, isBlank, isForeignBlock, relativeTime } from "../lib/format";
 import type { Block, BlockType, Note, NoteRelated, NoteSummary, Tag, TagUsage } from "../lib/types";
 import { BlockCard } from "./BlockCard";
 import type { MentionToken } from "./BlockCard";
@@ -12,8 +12,11 @@ import type { PdfPreview } from "./PdfModal";
 import { KindMenu } from "./KindMenu";
 import { MentionPalette } from "./MentionPalette";
 import { NoteLinks } from "./NoteLinks";
+import { ShareBadge } from "./ShareBadge";
+import { ShareModal } from "./ShareModal";
 import { TagPalette } from "./TagPalette";
 import { TagRow } from "./TagRow";
+import type { ToastKind } from "./ToastStack";
 import { Key } from "./ui";
 
 const SAVE_DELAY = 700;
@@ -23,14 +26,15 @@ const ORDER_KEY = "notai-note-order";
 interface NoteEditorProps {
   note: Note;
   tags: TagUsage[];
-  notebookTitle: string;
   anchorBlockId: number | null;
   onBack: () => void;
-  onOpenNote: (noteId: number, notebookId: number) => void;
+  onOpenNote: (noteId: number, blockId: number | null) => void;
   onWorkspaceChange: () => void | Promise<void>;
   onCreateTag: (name: string) => Promise<Tag | null>;
   onToggleTag: (tagId: number, attached: boolean) => void | Promise<void>;
   onRenameNote: (title: string) => void | Promise<void>;
+  onDeleteNote: () => void;
+  onNotify: (message: string, kind?: ToastKind) => void;
   onOpenImage: (image: ImagePreview) => void;
   onOpenPdf: (pdf: PdfPreview) => void;
   onError: (error: unknown) => void;
@@ -39,7 +43,6 @@ interface NoteEditorProps {
 export function NoteEditor({
   note,
   tags,
-  notebookTitle,
   anchorBlockId,
   onBack,
   onOpenNote,
@@ -47,6 +50,8 @@ export function NoteEditor({
   onCreateTag,
   onToggleTag,
   onRenameNote,
+  onDeleteNote,
+  onNotify,
   onOpenImage,
   onOpenPdf,
   onError,
@@ -56,6 +61,15 @@ export function NoteEditor({
   const [paletteFor, setPaletteFor] = useState<number | null>(null);
   const [kindMenuFor, setKindMenuFor] = useState<number | null>(null);
   const [title, setTitle] = useState(note.title);
+  const [shareOpen, setShareOpen] = useState(false);
+  // A nota pode ser de outra conta (chegou por grupo): só o dono apaga, e quem só lê não escreve —
+  // a tela não oferece o que a API nega.
+  const isOwner = note.role === "owner";
+  const totalBlocks = Object.values(note.counts).reduce((total, count) => total + count, 0);
+  const canEdit = note.role !== "viewer";
+  // A API separa as duas coisas: `editor` escreve blocos e aplica tags, mas renomear (PATCH) e
+  // apagar a nota são do dono — a tela não oferece o que a rota nega.
+  const canRename = isOwner;
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
@@ -451,7 +465,7 @@ export function NoteEditor({
         <div className="editor-head-bar">
           <button type="button" className="btn btn-ghost btn-back" onClick={onBack}>
             <ArrowLeft size={15} />
-            {notebookTitle || "Caderno"}
+            Notas
           </button>
           <button
             type="button"
@@ -473,18 +487,52 @@ export function NoteEditor({
           </button>
         </div>
         <input
-          className="note-title-input"
+          className={canRename ? "note-title-input" : "note-title-input is-readonly"}
           value={title}
           placeholder="Título da nota"
           maxLength={200}
+          readOnly={!canRename}
+          title={canRename ? undefined : "Só o dono renomeia a nota"}
           onChange={(event) => setTitle(event.target.value)}
           onBlur={() => title !== note.title && void onRenameNote(title)}
         />
+        <p className="note-meta">
+          <ShareBadge note={note} />
+          <span>
+            {totalBlocks} {totalBlocks === 1 ? "bloco" : "blocos"}
+          </span>
+          <span>atualizado {relativeTime(note.updated_at)}</span>
+          <span className="note-meta-actions">
+            {isOwner && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-compact"
+                onClick={() => setShareOpen(true)}
+                title="Compartilhar a nota com um grupo"
+              >
+                <UsersThree size={15} />
+                Compartilhar
+              </button>
+            )}
+            {isOwner && (
+              <button
+                type="button"
+                className="icon-btn is-danger"
+                onClick={onDeleteNote}
+                title="Apagar nota"
+                aria-label="Apagar nota"
+              >
+                <Trash size={15} />
+              </button>
+            )}
+          </span>
+        </p>
         <TagRow
           attached={note.tags}
           all={tags}
           onCreate={onCreateTag}
           onToggle={(tag, attached) => void onToggleTag(tag.id, attached)}
+          readOnly={!canEdit}
         />
       </header>
 
@@ -561,10 +609,20 @@ export function NoteEditor({
       {!newestFirst && tail}
       {!newestFirst && tools}
 
+      {shareOpen && isOwner && (
+        <ShareModal
+          note={note}
+          onClose={() => setShareOpen(false)}
+          onChanged={() => void onWorkspaceChange()}
+          onError={onError}
+          onNotify={onNotify}
+        />
+      )}
+
       {related && (
         <NoteLinks
           related={related}
-          onOpenNote={onOpenNote}
+          onOpenNote={(noteId) => onOpenNote(noteId, null)}
           onRelate={() => {
             setRelateOpen(true);
             void openPicker();

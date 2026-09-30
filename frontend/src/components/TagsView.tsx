@@ -19,14 +19,14 @@ export function TagsView({ tags, stats, onOpenTag, onDeleteTag }: TagsViewProps)
         <div className="view-head-main">
           <h1 className="view-title">Tags</h1>
           <p className="view-lede">
-            Tags atravessam cadernos e notas. Clique numa tag para filtrar a lista de cadernos (ela
+            Tags atravessam notas. Clique numa tag para filtrar a lista de notas (ela
             abre se estiver escondida); use Ctrl+Espaço dentro de uma nota para criar e aplicar sem
             sair do teclado.
           </p>
         </div>
         <div className="view-head-side">
           {stats && (
-            <div className="nb-counts is-large">
+            <div className="note-counts is-large">
               {KIND_ORDER.map((kind) => {
                 const KindIcon = KIND_ICONS[kind];
                 return (
@@ -55,7 +55,6 @@ export function TagsView({ tags, stats, onOpenTag, onDeleteTag }: TagsViewProps)
                 <button type="button" className="link" onClick={() => onOpenTag(tag.name)}>
                   {tag.name}
                 </button>
-                <span className="tag-meta">{tag.notebooks_count} cadernos</span>
                 <span className="tag-meta">{tag.notes_count} notas</span>
                 <button
                   type="button"

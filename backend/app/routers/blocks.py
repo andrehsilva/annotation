@@ -9,14 +9,14 @@ from ..store.client import Store, equal
 
 router = APIRouter(prefix="/api/blocks", tags=["blocks"])
 
-# `editor` escreve à vontade no caderno compartilhado, mas o bloco de outra conta é leitura: o conteúdo
+# `editor` escreve à vontade na nota compartilhada, mas o bloco de outra conta é leitura: o conteúdo
 # responde por quem o escreveu, e a mensagem diz o que fazer em vez de só recusar.
 NOT_THE_AUTHOR = "Só quem escreveu este bloco pode mudá-lo ou apagá-lo. Copie o trecho para um bloco seu."
 
 
-def _require_author(db: Store, user: documents.Row, block: documents.Row, notebook_id: int) -> None:
-    """O bloco é de quem pediu? (o papel no caderno não basta — ver a matriz em `acl.py`)"""
-    if not acl.owns_block(db.snapshot(user.id), user.id, block, notebook_id):
+def _require_author(db: Store, user: documents.Row, block: documents.Row, note_id: int) -> None:
+    """O bloco é de quem pediu? (o papel na nota não basta — ver a matriz em `acl.py`)"""
+    if not acl.owns_block(db.snapshot(user.id), user.id, block, note_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_THE_AUTHOR)
 
 
@@ -33,20 +33,18 @@ def list_blocks(
     user: documents.Row = Depends(deps.current_user),
     db: Store = Depends(deps.get_db),
 ) -> list[BlockListItem]:
-    """Every block of one kind across all notebooks, newest first, with no grouping."""
+    """Todo bloco de um tipo, em todas as notas ao meu alcance: mais novos primeiro, sem agrupar."""
     photo = db.snapshot(user.id)
     notes = {note.id: note for note in photo["notes"]}
-    titles = {notebook.id: notebook.title for notebook in photo["notebooks"]}
     blocks = [block for block in photo["blocks"] if block.note_id in notes]
     if type is not None:
         blocks = [block for block in blocks if block.type == type]
     blocks.sort(key=lambda block: (block.updated_at, block.id), reverse=True)
     shown = blocks[:limit]
-    owners = {notebook.id: notebook.owner_id for notebook in photo["notebooks"]}
     authors = services.block_authors(
         db,
         user.id,
-        [(block, owners.get(notes[block.note_id].notebook_id, 0)) for block in shown],
+        [(block, notes[block.note_id].owner_id) for block in shown],
     )
     return [
         BlockListItem(
@@ -60,8 +58,6 @@ def list_blocks(
             updated_at=block.updated_at,
             note_id=block.note_id,
             note_title=notes[block.note_id].title,
-            notebook_id=notes[block.note_id].notebook_id,
-            notebook_title=titles.get(notes[block.note_id].notebook_id, ""),
         )
         for block in shown
     ]
@@ -77,7 +73,7 @@ def update_block(
     block = deps.block_for(db, user, block_id)
     # o rótulo do evento sai antes da mutação, que logo abaixo mexe nos vínculos do bloco
     note = deps.note_for(db, user, block.note_id)
-    _require_author(db, user, block, note.notebook_id)
+    _require_author(db, user, block, note.id)
     note_title = note.title
     fields = payload.model_dump(exclude_unset=True)
     with store().transaction() as tx:
@@ -86,10 +82,9 @@ def update_block(
             block = documents.change("blocks", block_id, fields, owner_id=user.id, transaction_id=tx)
         links.reindex_block(db, block, user.id, tx)
         store().stage(
-            tx, [events.operation(user.id, "updated", "block", note_title, notebook_id=note.notebook_id)]
+            tx, [events.operation(user.id, "updated", "block", note_title, note_id=note.id)]
         )
-    store().invalidate(user.id)
-    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
+    acl.touch_note(db, note.id, skip=user.id)  # quem mais alcança precisa ver isto
     return BlockOut.model_validate(block)
 
 
@@ -102,7 +97,7 @@ def delete_block(
     block = deps.block_for(db, user, block_id)
     note_id = block.note_id
     note = deps.note_for(db, user, note_id)
-    _require_author(db, user, block, note.notebook_id)
+    _require_author(db, user, block, note.id)
     note_title = note.title  # o bloco some, então o rótulo sai antes
     with store().transaction() as tx:
         db.delete_where("block_links", [equal("block_id", str(block_id))])
@@ -118,8 +113,7 @@ def delete_block(
                     transaction_id=tx,
                 )
         store().stage(
-            tx, [events.operation(user.id, "deleted", "block", note_title, notebook_id=note.notebook_id)]
+            tx, [events.operation(user.id, "deleted", "block", note_title, note_id=note.id)]
         )
-    store().invalidate(user.id)
-    acl.touch_notebook(db, note.notebook_id)  # quem mais é membro precisa ver isto
+    acl.touch_note(db, note.id, skip=user.id)  # quem mais alcança precisa ver isto
     return Response(status_code=status.HTTP_204_NO_CONTENT)

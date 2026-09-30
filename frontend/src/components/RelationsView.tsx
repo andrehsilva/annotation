@@ -11,7 +11,7 @@ import { EmptyState } from "./ui";
 const NOTE_LIMIT = 300;
 
 interface RelationsViewProps {
-  onOpenNote: (noteId: number, notebookId: number) => void;
+  onOpenNote: (noteId: number) => void;
   onChanged: () => void;
   onError: (error: unknown) => void;
   onNotify: (message: string, kind?: ToastKind) => void;
@@ -114,7 +114,7 @@ export function RelationsView({
                 <button
                   type="button"
                   className="link"
-                  onClick={() => onOpenNote(edge.source_id, edge.source_notebook_id)}
+                  onClick={() => onOpenNote(edge.source_id)}
                 >
                   {edge.source_title}
                 </button>
@@ -122,7 +122,7 @@ export function RelationsView({
                 <button
                   type="button"
                   className="link"
-                  onClick={() => onOpenNote(edge.target_id, edge.target_notebook_id)}
+                  onClick={() => onOpenNote(edge.target_id)}
                 >
                   {edge.target_title}
                 </button>

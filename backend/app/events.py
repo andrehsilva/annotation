@@ -26,11 +26,11 @@ ACTIONS = (
     "uploaded",
 )
 
-ENTITIES = ("notebook", "note", "block", "tag", "relation", "media", "user", "group", "share")
+ENTITIES = ("note", "block", "tag", "relation", "media", "user", "group", "share")
 
 
 def _fields(
-    user_id: int, action: str, entity: str, target: str, detail: str, notebook_id: int | str | None = None
+    user_id: int, action: str, entity: str, target: str, detail: str, note_id: int | str | None = None
 ) -> dict[str, Any]:
     """Os mesmos cortes de antes: espaços colapsados e 200/80 caracteres por coluna.
 
@@ -43,21 +43,21 @@ def _fields(
         "entity": entity,
         "target": " ".join((target or "").split())[:200],
         "detail": " ".join((detail or "").split())[:80],
-        # Onde a ação aconteceu: é por esta coluna que os membros do caderno compartilhado veem a
-        # atividade uns dos outros. Fora de um caderno (conta, tag, upload) fica vazio.
-        "notebook_id": str(notebook_id) if notebook_id else "",
+        # Onde a ação aconteceu: é por esta coluna que quem recebeu a nota compartilhada vê a
+        # atividade dela. Fora de uma nota (conta, tag, upload) fica vazio.
+        "note_id": str(note_id) if note_id else "",
         "created_at": documents.to_iso(documents.now()),
     }
 
 
 def record(
-    db, user, action: str, entity: str, target: str = "", detail: str = "", notebook_id: int | None = None
+    db, user, action: str, entity: str, target: str = "", detail: str = "", note_id: int | None = None
 ) -> None:
     """Escreve o evento na hora, sem transação: scripts e `manage.py`, não rota."""
     db.create(
         "events",
         documents.record_id("events"),
-        _fields(user.id, action, entity, target, detail, notebook_id),
+        _fields(user.id, action, entity, target, detail, note_id),
     )
 
 
@@ -67,32 +67,32 @@ def operation(
     entity: str,
     target: str = "",
     detail: str = "",
-    notebook_id: int | None = None,
+    note_id: int | None = None,
 ) -> dict[str, Any]:
     """A operação de auditoria para `store().stage(tx, [...])`, junto com a escrita da entidade."""
     return documents.operation(
         "events",
         documents.record_id("events"),
-        _fields(user_id, action, entity, target, detail, notebook_id)
+        _fields(user_id, action, entity, target, detail, note_id)
     )
 
 
 def visible(user: Row) -> list[str]:
-    """Só os próprios movimentos. É o filtro usado quando não há caderno compartilhado em jogo."""
+    """Só os próprios movimentos. É o filtro usado quando não há nota compartilhada em jogo."""
     return [client.equal("user_id", str(user.id))]
 
 
-def _notebook_ids(db, user: Row) -> list[str]:
-    """Os cadernos que esta conta alcança — a segunda consulta do feed."""
+def _note_ids(db, user: Row) -> list[str]:
+    """As notas que esta conta alcança — a segunda consulta do feed."""
     from . import acl
 
-    return acl.readable_notebook_ids(db, user.id)
+    return acl.readable_note_ids(db, user.id)
 
 
 def _merge(db, user: Row, limit: int) -> list[Row]:
-    """Minhas ações + as do caderno em que eu participo, mais novas primeiro.
+    """Minhas ações + as da nota em que eu participo, mais novas primeiro.
 
-    O Appwrite combina as queries com AND e não tem OR: são duas consultas (a minha e a dos cadernos
+    O Appwrite combina as queries com AND e não tem OR: são duas consultas (a minha e a das notas
     que eu alcanço, cada uma já ordenada e limitada) e a junção acontece aqui.
     """
     order = [client.order_desc("created_at"), client.limit(limit)]
@@ -100,10 +100,10 @@ def _merge(db, user: Row, limit: int) -> list[Row]:
     for row in db.list_rows("events", [client.equal("user_id", str(user.id)), *order]).rows:
         rows[row["$id"]] = row
     if user.role != "admin":
-        notebook_ids = _notebook_ids(db, user)
-        for start in range(0, len(notebook_ids), client.IN_VALUES):
-            chunk = notebook_ids[start : start + client.IN_VALUES]
-            for row in db.list_rows("events", [client.equal("notebook_id", *chunk), *order]).rows:
+        note_ids = _note_ids(db, user)
+        for start in range(0, len(note_ids), client.IN_VALUES):
+            chunk = note_ids[start : start + client.IN_VALUES]
+            for row in db.list_rows("events", [client.equal("note_id", *chunk), *order]).rows:
                 rows[row["$id"]] = row
     ordered = sorted(rows.values(), key=lambda row: row.get("created_at") or "", reverse=True)
     return documents.many("events", ordered[:limit])
@@ -136,10 +136,10 @@ def unseen(db, user: Row) -> int:
     total = db.count("events", visible(user) + since)
     if user.role == "admin":
         return total
-    notebook_ids = _notebook_ids(db, user)
-    for start in range(0, len(notebook_ids), client.IN_VALUES):
-        chunk = notebook_ids[start : start + client.IN_VALUES]
-        total += db.count("events", [client.equal("notebook_id", *chunk), *since])
+    note_ids = _note_ids(db, user)
+    for start in range(0, len(note_ids), client.IN_VALUES):
+        chunk = note_ids[start : start + client.IN_VALUES]
+        total += db.count("events", [client.equal("note_id", *chunk), *since])
     return total
 
 

@@ -17,8 +17,8 @@ interface AdminGroupsProps {
 /**
  * A aba **Grupos** do admin: os grupos e quem está em cada um.
  *
- * O grupo é o público do compartilhamento — o dono do caderno escolhe um grupo, não pessoas — então
- * quem compõe cada grupo é decisão daqui. O caderno não é tocado ao apagar um grupo (quem perde o
+ * O grupo é o público do compartilhamento — o dono da nota escolhe um grupo, não pessoas — então
+ * quem compõe cada grupo é decisão daqui. A nota não é tocada ao apagar um grupo (quem perde o
  * acesso é quem estava nele), e a tela diz isso antes de apagar.
  */
 export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProps) {
@@ -86,7 +86,7 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
   const remove = (group: Group) =>
     onAskConfirm({
       title: "Apagar grupo",
-      message: `"${group.name}" sai de todos os cadernos que o compartilham e ${group.members} conta(s) perdem o acesso a eles. Os cadernos continuam com o dono. Não dá para desfazer.`,
+      message: `"${group.name}" sai de todas as notas que o compartilham e ${group.members} conta(s) perdem o acesso a elas. As notas continuam com o dono. Não dá para desfazer.`,
       confirmLabel: "Apagar grupo",
       danger: true,
       action: async () => {
@@ -161,7 +161,7 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
           </p>
         )}
         <p className="panel-hint">
-          O grupo nasce vazio. Compartilhar um caderno é do dono, na tela do caderno — aqui você
+          O grupo nasce vazio. Compartilhar uma nota é do dono, no cabeçalho da nota — aqui você
           decide quem está em cada grupo, e quem entrar depois já alcança o que o grupo alcança.
         </p>
       </section>

@@ -16,15 +16,14 @@ from typing import Any, Iterable
 
 from .client import DATABASE_ID, Conflict, Store, _clean, owner_permissions, store
 
-OWNER_TABLES = {"notebooks", "notes", "blocks", "tags", "media_files"}
+OWNER_TABLES = {"notes", "blocks", "tags", "media_files"}
 
 
 class Row(dict):
     """Linha normalizada: `note.title` e `note["title"]` valem o mesmo.
 
     O app inteiro lia atributos (`user.id`, `block.text`, `note.position`); manter isso evita
-    reescrever cada acesso. O que **não** existe é relacionamento (`note.blocks`, `notebook.notes`,
-    `note.tags`) — isso sempre vem do snapshot do usuário, montado no serviço que precisar.
+    reescrever cada acesso. O que **não** existe é relacionamento (`note.blocks`, `note.tags`) — isso sempre vem do snapshot do usuário, montado no serviço que precisar.
     """
 
     def __getattr__(self, name: str) -> Any:
@@ -106,20 +105,10 @@ def session(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def notebook(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **_base(row),
-        "title": row.get("title") or "",
-        "description": row.get("description") or "",
-        "owner_id": to_int(row.get("owner_id")),
-        **_stamps(row),
-    }
-
-
 def note(row: dict[str, Any]) -> dict[str, Any]:
     return {
         **_base(row),
-        "notebook_id": to_int(row.get("notebook_id")),
+        "owner_id": to_int(row.get("owner_id")),
         "title": row.get("title") or "",
         "position": to_int(row.get("position")),
         **_stamps(row),
@@ -152,11 +141,11 @@ def tag(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def member(row: dict[str, Any]) -> dict[str, Any]:
+def note_member(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "row_id": row["$id"],
         "user_id": to_int(row.get("user_id")),
-        "notebook_id": to_int(row.get("notebook_id")),
+        "note_id": to_int(row.get("note_id")),
         "role": row.get("role") or "viewer",
         "created_at": parse_dt(row.get("created_at")),
     }
@@ -180,10 +169,10 @@ def group_member(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def notebook_group(row: dict[str, Any]) -> dict[str, Any]:
+def note_group(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "row_id": row["$id"],
-        "notebook_id": to_int(row.get("notebook_id")),
+        "note_id": to_int(row.get("note_id")),
         "group_id": to_int(row.get("group_id")),
         "role": row.get("role") or "viewer",
         "created_at": parse_dt(row.get("created_at")),
@@ -229,7 +218,7 @@ def event(row: dict[str, Any]) -> dict[str, Any]:
         "entity": row.get("entity") or "",
         "target": row.get("target") or "",
         "detail": row.get("detail") or "",
-        "notebook_id": to_int(row.get("notebook_id")),
+        "note_id": to_int(row.get("note_id")),
         "created_at": parse_dt(row.get("created_at")),
     }
 
@@ -238,15 +227,6 @@ def note_tag(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "row_id": row["$id"],
         "note_id": to_int(row.get("note_id")),
-        "tag_id": to_int(row.get("tag_id")),
-        "created_at": parse_dt(row.get("created_at")),
-    }
-
-
-def notebook_tag(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "row_id": row["$id"],
-        "notebook_id": to_int(row.get("notebook_id")),
         "tag_id": to_int(row.get("tag_id")),
         "created_at": parse_dt(row.get("created_at")),
     }
@@ -272,18 +252,16 @@ def drive_state(row: dict[str, Any]) -> dict[str, Any]:
 NORMALIZE = {
     "users": user,
     "sessions": session,
-    "notebooks": notebook,
-    "notebook_members": member,
     "groups": group,
     "group_members": group_member,
-    "notebook_groups": notebook_group,
     "notes": note,
+    "note_members": note_member,
+    "note_groups": note_group,
     "blocks": block,
     "tags": tag,
     "note_relations": relation,
     "block_links": link,
     "note_tags": note_tag,
-    "notebook_tags": notebook_tag,
     "media_files": media,
     "events": event,
     "drive_files": drive_file,

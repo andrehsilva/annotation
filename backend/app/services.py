@@ -4,6 +4,8 @@ O Appwrite não tem `JOIN` nem `GROUP BY`: cada função aqui lê a **foto** do 
 (`store().snapshot`) e conta/ordena em Python. Consulta pontual só onde a assinatura não traz o
 dono (`block_counts_for_notes` e os quatro `note_*`, que recebem a nota), e sempre por `equal` com
 no máximo 100 valores por chamada — o teto medido nesta instância.
+
+Não há caderno: a **nota** é a unidade, e é ela que tem dono, papel e compartilhamento.
 """
 
 from __future__ import annotations
@@ -16,15 +18,14 @@ from . import acl
 from .markdown import UNTITLED
 from .schemas import (
     Backlink,
+    NoteOut,
     NoteRelated,
     NoteRelationOut,
-    NotebookAffinity,
-    NotebookOut,
-    NotebookSummary,
     NoteSummary,
     RelatableNote,
     RelationEdge,
     SearchHit,
+    BlockOut,
     empty_counts,
 )
 from .store import documents
@@ -66,7 +67,7 @@ def _group(rows: list[documents.Row], column: str) -> dict[int, list[documents.R
 def _tags_by(
     photo: dict[str, list[documents.Row]], table: str, column: str
 ) -> dict[int, list[documents.Row]]:
-    """As tags de cada linha da junção (`note_tags`/`notebook_tags`), na ordem do ORM.
+    """As tags de cada linha da junção (`note_tags`), na ordem do ORM.
 
     Tag de outro dono não está na foto, então a linha da junção fica sem ela.
     """
@@ -130,13 +131,9 @@ def _by_ids(db: Store, table: str, column: str, ids: Iterable[int]) -> list[docu
 
 
 def _related(db: Store, note_ids: Iterable[int]) -> dict[int, RelatableNote]:
-    """O outro lado de um vínculo: a nota e o nome do caderno dela, como o `selectinload` dava."""
+    """O outro lado de um vínculo: a nota, como o `selectinload` dava."""
     notes = _by_ids(db, "notes", "$id", note_ids)
-    titles = {
-        notebook.id: notebook.title
-        for notebook in _by_ids(db, "notebooks", "$id", {note.notebook_id for note in notes})
-    }
-    return {note.id: note_ref(note, titles.get(note.notebook_id, "")) for note in notes}
+    return {note.id: note_ref(note) for note in notes}
 
 
 # ------------------------------------------------------------------ contagens
@@ -145,7 +142,7 @@ def _related(db: Store, note_ids: Iterable[int]) -> dict[int, RelatableNote]:
 def _block_counts(
     blocks: Iterable[documents.Row], bucket_of: dict[int, int]
 ) -> dict[int, dict[str, int]]:
-    """O `GROUP BY` em Python: `bucket_of` diz em que balde (caderno ou nota) cada bloco cai."""
+    """O `GROUP BY` em Python: `bucket_of` diz em que balde (a nota) cada bloco cai."""
     counts: dict[int, dict[str, int]] = defaultdict(empty_counts)
     for block in blocks:
         bucket_id = bucket_of.get(block.note_id)
@@ -156,19 +153,15 @@ def _block_counts(
     return counts
 
 
-def block_counts_by_notebook(db: Store, user_id: int) -> dict[int, dict[str, int]]:
+def block_counts_by_note(db: Store, user_id: int) -> dict[int, dict[str, int]]:
     photo = snapshot(db, user_id)
-    return _block_counts(photo["blocks"], {note.id: note.notebook_id for note in photo["notes"]})
+    return _block_counts(photo["blocks"], {note.id: note.id for note in photo["notes"]})
 
 
 def block_counts_for_notes(db: Store, note_ids: list[int]) -> dict[int, dict[str, int]]:
     """`note_ids` always comes from an already-scoped query, so it needs no owner of its own."""
     blocks = _by_ids(db, "blocks", "note_id", note_ids)
     return _block_counts(blocks, {note_id: note_id for note_id in note_ids})
-
-
-def note_counts_by_notebook(db: Store, user_id: int) -> dict[int, int]:
-    return dict(Counter(note.notebook_id for note in snapshot(db, user_id)["notes"]))
 
 
 # ------------------------------------------------------------------ resumos
@@ -179,8 +172,8 @@ def block_authors(
 ) -> dict[int, str]:
     """{id do bloco: nome de quem escreveu}, só para os blocos de outra conta.
 
-    Cada item é `(bloco, dono do caderno)`: o dono é a resposta para as linhas de antes de
-    `created_by`, quando quem escrevia era ele. Num caderno só meu — o caso comum — nada é consultado.
+    Cada item é `(bloco, dono da nota)`: o dono é a resposta para as linhas de antes de `created_by`,
+    quando quem escrevia era ele. Numa nota só minha — o caso comum — nada é consultado.
     """
     pairs = [(block, block.created_by or owner_id) for block, owner_id in blocks]
     others = sorted({author for _block, author in pairs if author and author != viewer_id})
@@ -193,17 +186,17 @@ def block_authors(
     return {block.id: names[author] for block, author in pairs if names.get(author)}
 
 
-def notebook_owner(photo: dict, notebook_id: int) -> int:
-    """O dono do caderno na foto: resposta para os blocos antigos, sem `created_by`."""
-    for row in photo["notebooks"]:
-        if row.id == notebook_id:
+def note_owner(photo: dict, note_id: int) -> int:
+    """O dono da nota na foto: resposta para os blocos antigos, sem `created_by`."""
+    for row in photo["notes"]:
+        if row.id == note_id:
             return row.owner_id
     return 0
 
 
 def _owner_names(db: Store, photo: dict) -> dict[int, str]:
-    """Nome do dono de cada caderno da foto, numa consulta só."""
-    ids = sorted({str(row.owner_id) for row in photo["notebooks"]})
+    """Nome do dono de cada nota da foto, numa consulta só."""
+    ids = sorted({str(row.owner_id) for row in photo["notes"]})
     if not ids:
         return {}
     return {
@@ -212,34 +205,47 @@ def _owner_names(db: Store, photo: dict) -> dict[int, str]:
     }
 
 
-def notebook_summary(
-    notebook: documents.Row,
-    notes_count: int,
-    counts: dict[str, int],
-    relations_count: int,
-    tags: Iterable[documents.Row] = (),
+def _relations_touching(photo: dict) -> dict[int, int]:
+    """Quantos vínculos (declarados ou citações) tocam cada nota da foto."""
+    counted: dict[int, int] = defaultdict(int)
+    for relation in photo["note_relations"]:
+        counted[relation.source_id] += 1
+        counted[relation.target_id] += 1
+    blocks = {block.id: block.note_id for block in photo["blocks"]}
+    for link in photo["block_links"]:
+        counted[link.note_id] += 1  # a nota citada
+        source = blocks.get(link.block_id)
+        if source is not None:
+            counted[source] += 1  # a nota que cita
+    return counted
+
+
+def note_summary(
+    note: documents.Row,
+    counts: dict[str, int] | None,
+    relations_count: int = 0,
     role: str = "owner",
     owner_name: str = "",
     shared_groups: Iterable[str] = (),
     shared_people: int = 0,
-) -> NotebookSummary:
-    """`relations_count` here is how many other notebooks this one reaches through its notes.
+) -> NoteSummary:
+    """`counts` vem de fora: o resumo lê o que já está pendurado na linha, sem lazy load.
 
-    `tags` vem de fora: o caderno não carrega lista nenhuma e a linha que o `notebook_detail`
-    recebe (um `get` pontual) traz só os campos dele.
+    `role`/`owner_name`/`shared_*` descrevem o compartilhamento desta nota com quem pediu — o dono
+    vê com quem ela saiu, quem recebeu vê de quem ela veio.
     """
-    return NotebookSummary(
-        id=notebook.id,
-        title=notebook.title,
-        description=notebook.description,
-        created_at=notebook.created_at,
-        updated_at=notebook.updated_at,
-        tags=list(tags),
-        notes_count=notes_count,
-        counts={**empty_counts(), **counts},
+    return NoteSummary(
+        id=note.id,
+        title=note.title,
+        position=note.position,
+        created_at=note.created_at,
+        updated_at=note.updated_at,
+        tags=list(note.get("tags", ())),
+        counts={**empty_counts(), **(counts or {})},
+        excerpt=note_excerpt(note),
         relations_count=relations_count,
         role=role,
-        owner_id=notebook.owner_id,
+        owner_id=note.owner_id,
         owner_name=owner_name,
         shared=role != "owner",
         shared_groups=list(shared_groups),
@@ -247,32 +253,27 @@ def notebook_summary(
     )
 
 
-def list_notebook_summaries(db: Store, user_id: int) -> list[NotebookSummary]:
+def list_note_summaries(db: Store, user_id: int) -> list[NoteSummary]:
+    """As notas que a conta alcança — as dela e as compartilhadas com ela —, mais recentes primeiro."""
     photo = snapshot(db, user_id)
-    counts = block_counts_by_notebook(db, user_id)
-    notes = note_counts_by_notebook(db, user_id)
-    affinity = affinity_counts_by_notebook(db, user_id)
-    tags = _tags_by(photo, "notebook_tags", "notebook_id")
+    counts = block_counts_by_note(db, user_id)
+    contacts = _relations_touching(photo)
     owners = _owner_names(db, photo)
-    notebooks = sorted(photo["notebooks"], key=lambda row: (row.title, row.id))
-    # O papel custa uma varredura da foto por caderno e responde duas perguntas: qual é o papel aqui e
-    # de quais cadernos o compartilhamento de saída pode ser lido. Uma varredura, uma consulta em lote.
-    roles = {row.id: acl.role_in_photo(photo, row.id) or "viewer" for row in notebooks}
-    audience = acl.share_audience(
-        db, [row for row in notebooks if roles[row.id] == "owner"]
-    )
+    notes = sorted(photo["notes"], key=_recent, reverse=True)
+    # O papel custa uma varredura da foto por nota e responde duas perguntas: qual é o papel aqui e
+    # de quais notas o compartilhamento de saída pode ser lido. Uma varredura, uma consulta em lote.
+    roles = {row.id: acl.role_in_photo(photo, row.id) or "viewer" for row in notes}
+    audience = acl.share_audience(db, [row for row in notes if roles[row.id] == "owner"])
     out = []
-    for notebook in notebooks:
-        groups, people = audience.get(notebook.id, ((), 0))
+    for note in notes:
+        groups, people = audience.get(note.id, ((), 0))
         out.append(
-            notebook_summary(
-                notebook,
-                notes.get(notebook.id, 0),
-                counts.get(notebook.id, {}),
-                affinity.get(notebook.id, 0),
-                tags.get(notebook.id, ()),
-                roles[notebook.id],
-                owners.get(notebook.owner_id, ""),
+            note_summary(
+                note,
+                counts.get(note.id, {}),
+                contacts.get(note.id, 0),
+                roles[note.id],
+                owners.get(note.owner_id, ""),
                 groups,
                 people,
             )
@@ -292,63 +293,54 @@ def note_excerpt(note: documents.Row) -> str:
     return ""
 
 
-def note_summary(
-    note: documents.Row, counts: dict[str, int] | None, notebook_title: str
-) -> NoteSummary:
-    """`counts` and the notebook name come from the caller so nothing lazy-loads per note."""
-    return NoteSummary(
-        id=note.id,
-        notebook_id=note.notebook_id,
-        notebook_title=notebook_title,
-        title=note.title,
-        position=note.position,
-        created_at=note.created_at,
-        updated_at=note.updated_at,
-        tags=list(note.get("tags", ())),
-        counts={**empty_counts(), **(counts or {})},
-        excerpt=note_excerpt(note),
-    )
-
-
-def notebook_detail(db: Store, user_id: int, notebook: documents.Row) -> NotebookOut:
+def note_detail(db: Store, user_id: int, note: documents.Row) -> NoteOut:
+    """A nota com os blocos, como o editor a recebe (uma consulta em lote para os autores)."""
     photo = snapshot(db, user_id)
-    notes = sorted(
-        (note for note in photo["notes"] if note.notebook_id == notebook.id),
-        key=lambda note: (note.position, note.id),
+    notes = {row.id: row for row in photo["notes"]}
+    own = notes.get(note.id, note)
+    blocks = sorted(
+        (block for block in photo["blocks"] if block.note_id == note.id), key=_block_order
     )
-    counts = _block_counts(photo["blocks"], {note.id: note.id for note in notes})
-    affinity = notebook_affinity(db, user_id).get(notebook.id, [])
-    tags = _tags_by(photo, "notebook_tags", "notebook_id")
-    role = acl.role_in_photo(photo, notebook.id) or "viewer"
-    # Só o dono tem público para fora; para os outros o caderno é de outra conta e a consulta nem sai.
+    owners = _owner_names(db, photo)
+    authors = block_authors(db, user_id, [(block, note_owner(photo, note.id)) for block in blocks])
+    role = acl.role_in_photo(photo, note.id) or "viewer"
+    # Só o dono tem público para fora; para os outros a nota é de outra conta e a consulta nem sai.
     groups, people = (
-        acl.share_audience(db, [notebook]).get(notebook.id, ((), 0)) if role == "owner" else ((), 0)
+        acl.share_audience(db, [own]).get(note.id, ((), 0)) if role == "owner" else ((), 0)
     )
-    return NotebookOut(
-        **notebook_summary(
-            notebook,
-            len(notes),
-            block_counts_by_notebook(db, user_id).get(notebook.id, {}),
-            len(affinity),
-            tags.get(notebook.id, ()),
+    return NoteOut(
+        **note_summary(
+            own,
+            _block_counts(photo["blocks"], {note.id: note.id}).get(note.id, {}),
+            _relations_touching(photo).get(note.id, 0),
             role,
-            _owner_names(db, photo).get(notebook.owner_id, ""),
+            owners.get(own.owner_id, ""),
             groups,
             people,
         ).model_dump(),
-        notes=[note_summary(note, counts.get(note.id), notebook.title) for note in notes],
-        affinity=affinity,
+        blocks=[
+            BlockOut(
+                id=block.id,
+                note_id=block.note_id,
+                position=block.position,
+                type=block.type,
+                text=block.text,
+                language=block.language,
+                url=block.url,
+                caption=block.caption,
+                author=authors.get(block.id, ""),
+                created_at=block.created_at,
+                updated_at=block.updated_at,
+            )
+            for block in blocks
+        ],
+        relations=note_relations_for(db, own),
     )
 
 
-def note_ref(note: documents.Row, notebook_title: str) -> RelatableNote:
-    """Label for a note seen from somewhere else; o caderno vem de fora (não há lazy load)."""
-    return RelatableNote(
-        id=note.id,
-        title=note.title,
-        notebook_id=note.notebook_id,
-        notebook_title=notebook_title,
-    )
+def note_ref(note: documents.Row) -> RelatableNote:
+    """Label for a note seen from somewhere else (não há lazy load: a linha já está em mãos)."""
+    return RelatableNote(id=note.id, title=note.title)
 
 
 # ------------------------------------------------------------------ vínculos da nota
@@ -428,65 +420,12 @@ def note_related(db: Store, note: documents.Row) -> NoteRelated:
 def all_note_summaries(
     db: Store, user_id: int, query: str = "", limit: int = 300
 ) -> list[NoteSummary]:
-    """Every note of this user, most recently edited first: the global notes list."""
-    photo = snapshot(db, user_id)
-    titles = {notebook.id: notebook.title for notebook in photo["notebooks"]}
+    """As notas que a conta alcança, mais recentes primeiro — é a lista principal do app."""
+    notes = list_note_summaries(db, user_id)
     term = query.strip().lower()
-    recent = sorted(photo["notes"], key=_recent, reverse=True)
-    notes = [note for note in recent if _holds(note.title, term)][:limit]
-    counts = _block_counts(photo["blocks"], {note.id: note.id for note in notes})
-    return [
-        note_summary(note, counts.get(note.id), titles.get(note.notebook_id, "")) for note in notes
-    ]
-
-
-def notebook_affinity(db: Store, user_id: int) -> dict[int, list[NotebookAffinity]]:
-    """Notebook pairs reached through their notes, counted per crossing link.
-
-    Two notes in the same notebook add nothing: affinity is about what leaves the notebook.
-    """
-    photo = snapshot(db, user_id)
-    notes = {note.id: note for note in photo["notes"]}
-    blocks = {block.id: block for block in photo["blocks"]}
-    pairs: dict[tuple[int, int], int] = defaultdict(int)
-
-    for relation in photo["note_relations"]:
-        left = notes.get(relation.source_id)
-        right = notes.get(relation.target_id)
-        if left is None or right is None or left.notebook_id == right.notebook_id:
-            continue
-        pairs[_pair(left.notebook_id, right.notebook_id)] += 1
-
-    for link in photo["block_links"]:
-        block = blocks.get(link.block_id)
-        target = notes.get(link.note_id)
-        if block is None or target is None:
-            continue
-        source = notes.get(block.note_id)
-        if source is None or source.notebook_id == target.notebook_id:
-            continue
-        pairs[_pair(source.notebook_id, target.notebook_id)] += 1
-
-    titles = {notebook.id: notebook.title for notebook in photo["notebooks"]}
-    affinity: dict[int, list[NotebookAffinity]] = defaultdict(list)
-    for (left, right), count in pairs.items():
-        affinity[left].append(
-            NotebookAffinity(notebook_id=right, title=titles.get(right, ""), links_count=count)
-        )
-        affinity[right].append(
-            NotebookAffinity(notebook_id=left, title=titles.get(left, ""), links_count=count)
-        )
-    for entries in affinity.values():
-        entries.sort(key=lambda entry: (-entry.links_count, entry.title))
-    return affinity
-
-
-def affinity_counts_by_notebook(db: Store, user_id: int) -> dict[int, int]:
-    """How many other notebooks each notebook reaches through its notes."""
-    return {
-        notebook_id: len(entries)
-        for notebook_id, entries in notebook_affinity(db, user_id).items()
-    }
+    if not term:
+        return notes[:limit]
+    return [note for note in notes if _holds(note.title, term)][:limit]
 
 
 def relation_edges(db: Store, user_id: int) -> list[RelationEdge]:
@@ -529,13 +468,7 @@ def _edge(
         target_id=target.id,
         source_title=source.title or UNTITLED,
         target_title=target.title or UNTITLED,
-        source_notebook_id=source.notebook_id,
-        target_notebook_id=target.notebook_id,
     )
-
-
-def _pair(left: int, right: int) -> tuple[int, int]:
-    return (left, right) if left < right else (right, left)
 
 
 # ------------------------------------------------------------------ busca
@@ -556,20 +489,6 @@ def search(db: Store, user_id: int, query: str, limit: int = 8) -> list[SearchHi
     notes = {note.id: note for note in photo["notes"]}
     hits: list[SearchHit] = []
 
-    listed = sorted(photo["notebooks"], key=lambda row: (row.title, row.id))
-    for notebook in [
-        row for row in listed if _holds(row.title, needle) or _holds(row.description, needle)
-    ][:limit]:
-        hits.append(
-            SearchHit(
-                kind="notebook",
-                id=notebook.id,
-                notebook_id=notebook.id,
-                title=notebook.title,
-                snippet=notebook.description[:120],
-            )
-        )
-
     counted = Counter(link.tag_id for link in photo["note_tags"])
     for tag in [row for row in sorted(photo["tags"], key=_tag_order) if _holds(row.name, needle)][
         :limit
@@ -585,7 +504,6 @@ def search(db: Store, user_id: int, query: str, limit: int = 8) -> list[SearchHi
             SearchHit(
                 kind="note",
                 id=note.id,
-                notebook_id=note.notebook_id,
                 note_id=note.id,
                 title=note.title or "Nota sem título",
                 snippet=note_excerpt(note),
@@ -605,7 +523,6 @@ def search(db: Store, user_id: int, query: str, limit: int = 8) -> list[SearchHi
             SearchHit(
                 kind="block",
                 id=block.id,
-                notebook_id=note.notebook_id,
                 note_id=block.note_id,
                 title=f"{block.type} · {note.title or 'Nota sem título'}",
                 snippet=" ".join(body.split())[:140],

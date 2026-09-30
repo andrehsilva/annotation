@@ -16,14 +16,12 @@ router = APIRouter(prefix="/api/tags", tags=["tags"])
 def _usage(db: Store, user_id: int) -> list[TagUsage]:
     """Contagem de uso sai da foto do usuário: sem `GROUP BY`, a soma é feita em memória."""
     photo = db.snapshot(user_id)
-    notebook_counts = Counter(link.tag_id for link in photo["notebook_tags"])
     note_counts = Counter(link.tag_id for link in photo["note_tags"])
     return [
         TagUsage(
             id=tag.id,
             name=tag.name,
             color=tag.color,
-            notebooks_count=notebook_counts.get(tag.id, 0),
             notes_count=note_counts.get(tag.id, 0),
         )
         for tag in sorted(photo["tags"], key=lambda tag: tag.name)
@@ -124,7 +122,6 @@ def delete_tag(
     name = tag.name  # a tag some no delete, então o rótulo sai antes
     # Sem cascata no servidor: os vínculos daquela tag saem primeiro, senão ficam apontando para
     # uma linha que não existe mais.
-    db.delete_where("notebook_tags", [equal("tag_id", str(tag.id))])
     db.delete_where("note_tags", [equal("tag_id", str(tag.id))])
     with db.transaction() as tx:
         db.stage(

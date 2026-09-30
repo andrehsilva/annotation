@@ -28,8 +28,8 @@ export function AdminView(props: AdminViewProps) {
           <h1 className="view-title">Admin</h1>
           <p className="view-lede">
             {tab === "users"
-              ? "Cada conta vê os próprios cadernos — e os que forem compartilhados com os grupos dela. Na sua própria linha as ações ficam fora: o backend recusa desativar ou apagar a própria conta, e a sua senha se troca pelo menu do usuário."
-              : "O grupo é o público do compartilhamento: o dono do caderno escolhe um grupo, não pessoas, e quem está nele alcança o caderno — inclusive quem entrar depois."}
+              ? "Cada conta vê as próprias notas — e as que forem compartilhadas com os grupos dela. Na sua própria linha as ações ficam fora: o backend recusa desativar ou apagar a própria conta, e a sua senha se troca pelo menu do usuário."
+              : "O grupo é o público do compartilhamento: o dono da nota escolhe um grupo, não pessoas, e quem está nele alcança a nota — inclusive quem entrar depois."}
           </p>
         </div>
         <nav className="seg-tabs" aria-label="Seções do admin">

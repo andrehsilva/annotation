@@ -20,7 +20,6 @@ from .store.documents import Row
 COOKIE_NAME = "notai_session"
 LAST_SEEN_INTERVAL = timedelta(minutes=1)
 
-NOT_FOUND_NOTEBOOK = "Caderno não encontrado"
 NOT_FOUND_NOTE = "Nota não encontrada"
 NOT_FOUND_BLOCK = "Bloco não encontrado"
 NOT_FOUND_TAG = "Tag não encontrada"
@@ -70,18 +69,15 @@ def admin_user(user: Row = Depends(current_user)) -> Row:
     return user
 
 
-def notebook_for(db: Store, user: Row, notebook_id: int, minimum: str = "editor") -> Row:
-    notebook = documents.get("notebooks", notebook_id)
-    if notebook is None or not acl.allows(acl.role_for(db, user.id, notebook_id), minimum):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND_NOTEBOOK)
-    return notebook
-
-
 def note_for(db: Store, user: Row, note_id: int, minimum: str = "editor") -> Row:
+    """A nota que a conta alcança, com o papel mínimo que a rota exige — 404 quando não alcança.
+
+    A nota é a unidade do app (não há mais caderno): o papel sai de `acl.role_for`, que junta a linha
+    direta de membro com o que os grupos dela concedem.
+    """
     note = documents.get("notes", note_id)
-    if note is None:
+    if note is None or not acl.allows(acl.role_for(db, user.id, note_id), minimum):
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND_NOTE)
-    notebook_for(db, user, note.notebook_id, minimum)
     return note
 
 

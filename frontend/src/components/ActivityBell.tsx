@@ -1,13 +1,15 @@
-import { Bell, Image, LinkSimple, NoteBlank, Notebook, Tag, TextAa, User } from "@phosphor-icons/react";
+import { Bell, Image, LinkSimple, NoteBlank, Tag, TextAa, User } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 
 import { relativeTime } from "../lib/format";
 import type { ActivityEvent, EventFeed } from "../lib/types";
 
-interface ActivityBellProps {
+interface ActivityPanelProps {
   feed: EventFeed | null;
   open: boolean;
+  /** Onde o painel encosta (canto direito do cabeçalho, como o menu de ⋯); nulo = posição do CSS. */
+  anchor: { top: number; right: number } | null;
   onOpenChange: (open: boolean) => void;
   onAllRead: () => void;
 }
@@ -25,7 +27,6 @@ const VERBS: Record<string, string> = {
 
 /** O substantivo do alvo, com artigo, para a frase ficar inteira. */
 const NOUNS: Record<string, string> = {
-  notebook: "o caderno",
   note: "a nota",
   block: "o bloco em",
   tag: "a tag",
@@ -35,7 +36,6 @@ const NOUNS: Record<string, string> = {
 };
 
 const ICONS: Record<string, Icon> = {
-  notebook: Notebook,
   note: NoteBlank,
   block: TextAa,
   tag: Tag,
@@ -44,7 +44,7 @@ const ICONS: Record<string, Icon> = {
   user: User,
 };
 
-/** "criou o caderno «Rust»"; o rótulo vazio vira "sem título". */
+/** "criou a nota «Rust»"; o rótulo vazio vira "sem título". */
 function describe(event: ActivityEvent): string {
   const target = event.target || "sem título";
   // Etiquetar tem duas partes (a tag e onde ela entrou), então a frase não usa o substantivo.
@@ -58,12 +58,16 @@ function describe(event: ActivityEvent): string {
   return [head.trim(), `"${target}"`].filter(Boolean).join(" ");
 }
 
-/** O sino do topo: quantas interações ainda não foram vistas e a última página delas. */
-export function ActivityBell({ feed, open, onOpenChange, onAllRead }: ActivityBellProps) {
+/**
+ * A página de atividade: as últimas interações, abertas pelo item **Atividade** do menu do nome.
+ *
+ * Só o painel mora aqui — o gatilho é uma linha do menu, ao lado de Admin, Drive e Sair, e o painel
+ * se ancora no canto direito do cabeçalho (o `anchor`), longe do popover que acabou de fechar.
+ */
+export function ActivityPanel({ feed, open, anchor, onOpenChange, onAllRead }: ActivityPanelProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   /** O painel já esteve aberto: fechar depois disso conta como "vi tudo". */
   const wasOpen = useRef(false);
-  const unread = feed?.unread ?? 0;
   const items = feed?.items ?? [];
 
   useEffect(() => {
@@ -93,49 +97,42 @@ export function ActivityBell({ feed, open, onOpenChange, onAllRead }: ActivityBe
     }
   }, [open, onAllRead]);
 
+  if (!open) return null;
+
   return (
     <div className="activity-menu" ref={boxRef}>
-      <button
-        type="button"
-        className={open ? "topnav-chip is-active" : "topnav-chip"}
-        onClick={() => onOpenChange(!open)}
-        title="Atividade"
+      <div
+        className="activity-popover"
+        role="menu"
         aria-label="Atividade"
-        aria-haspopup="menu"
-        aria-expanded={open}
+        style={anchor ? { top: anchor.top, right: anchor.right, position: "fixed" } : undefined}
       >
-        <Bell size={15} weight="bold" />
-        {unread > 0 && <span className="activity-badge">{unread}</span>}
-      </button>
-      {open && (
-        <div className="activity-popover" role="menu" aria-label="Atividade">
-          <p className="activity-head">Atividade</p>
-          {items.length === 0 ? (
-            <p className="activity-empty">Nada por aqui ainda.</p>
-          ) : (
-            <ul className="activity-list">
-              {items.map((event) => {
-                const EntityIcon = ICONS[event.entity] ?? Bell;
-                return (
-                  <li key={event.id} className="activity-item">
-                    <EntityIcon className="activity-icon" size={14} weight="bold" />
-                    <span className="activity-body">
-                      <span className="activity-text">
-                        {!event.mine && event.actor && (
-                          <span className="activity-actor">{event.actor} · </span>
-                        )}
-                        {describe(event)}
-                      </span>
-                      <span className="activity-time">{relativeTime(event.created_at)}</span>
+        <p className="activity-head">Atividade</p>
+        {items.length === 0 ? (
+          <p className="activity-empty">Nada por aqui ainda.</p>
+        ) : (
+          <ul className="activity-list">
+            {items.map((event) => {
+              const EntityIcon = ICONS[event.entity] ?? Bell;
+              return (
+                <li key={event.id} className="activity-item">
+                  <EntityIcon className="activity-icon" size={14} weight="bold" />
+                  <span className="activity-body">
+                    <span className="activity-text">
+                      {!event.mine && event.actor && (
+                        <span className="activity-actor">{event.actor} · </span>
+                      )}
+                      {describe(event)}
                     </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <p className="activity-foot">últimas 5 interações</p>
-        </div>
-      )}
+                    <span className="activity-time">{relativeTime(event.created_at)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="activity-foot">últimas 5 interações</p>
+      </div>
     </div>
   );
 }

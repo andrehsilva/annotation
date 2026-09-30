@@ -4,7 +4,7 @@ import type { NoteRelated } from "../lib/types";
 
 interface NoteLinksProps {
   related: NoteRelated;
-  onOpenNote: (noteId: number, notebookId: number) => void;
+  onOpenNote: (noteId: number) => void;
   onRelate: () => void;
   onRemoveRelation: (relationId: number) => void;
 }
@@ -35,11 +35,11 @@ export function NoteLinks({ related, onOpenNote, onRelate, onRemoveRelation }: N
                 <button
                   type="button"
                   className="link"
-                  onClick={() => onOpenNote(relation.other.id, relation.other.notebook_id)}
+                  onClick={() => onOpenNote(relation.other.id)}
                 >
                   {relation.other.title || "Nota sem título"}
                 </button>
-                <span className="relation-label">{relation.label || relation.other.notebook_title}</span>
+                <span className="relation-label">{relation.label}</span>
                 <button
                   type="button"
                   className="icon-btn is-tiny"
@@ -65,7 +65,7 @@ export function NoteLinks({ related, onOpenNote, onRelate, onRemoveRelation }: N
                 type="button"
                 key={mention.id}
                 className="link-chip"
-                onClick={() => onOpenNote(mention.id, mention.notebook_id)}
+                onClick={() => onOpenNote(mention.id)}
               >
                 {mention.title}
               </button>
@@ -85,7 +85,7 @@ export function NoteLinks({ related, onOpenNote, onRelate, onRemoveRelation }: N
                 <button
                   type="button"
                   className="link"
-                  onClick={() => onOpenNote(backlink.note.id, backlink.note.notebook_id)}
+                  onClick={() => onOpenNote(backlink.note.id)}
                 >
                   {backlink.note.title || "Nota sem título"}
                 </button>

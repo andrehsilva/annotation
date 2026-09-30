@@ -1,4 +1,4 @@
-import { Code, FileText, MagnifyingGlass, Notebook, Tag } from "@phosphor-icons/react";
+import { Code, FileText, MagnifyingGlass, Tag } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -7,14 +7,12 @@ import type { SearchHit } from "../lib/types";
 import { Key } from "./ui";
 
 const HIT_ICONS: Record<SearchHit["kind"], Icon> = {
-  notebook: Notebook,
   note: FileText,
   block: Code,
   tag: Tag,
 };
 
 const HIT_LABELS: Record<SearchHit["kind"], string> = {
-  notebook: "caderno",
   note: "nota",
   block: "bloco",
   tag: "tag",
@@ -75,7 +73,7 @@ export function CommandPalette({ onClose, onNavigate }: CommandPaletteProps) {
             ref={inputRef}
             className="modal-input"
             value={query}
-            placeholder="Buscar cadernos, notas, blocos e tags..."
+            placeholder="Buscar notas, blocos e tags..."
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") onClose();

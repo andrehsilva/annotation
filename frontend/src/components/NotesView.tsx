@@ -1,38 +1,24 @@
-import { NoteBlank } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { GraphIcon, NoteBlank, Plus } from "@phosphor-icons/react";
 
-import { api } from "../lib/api";
 import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, KIND_ORDER, relativeTime } from "../lib/format";
 import type { NoteSummary } from "../lib/types";
-import { EmptyState, Spinner } from "./ui";
+import { ShareBadge } from "./ShareBadge";
+import { EmptyState } from "./ui";
 
-interface NotesViewProps {
-  onOpenNote: (noteId: number, notebookId: number) => void;
-  onError: (error: unknown) => void;
-}
-
-/** Every note of this user, newest edit first: the fast way back into a thought. */
-export function NotesView({ onOpenNote, onError }: NotesViewProps) {
-  const [notes, setNotes] = useState<NoteSummary[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void api
-      .listNotes()
-      .then((list) => {
-        if (!cancelled) setNotes(list);
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) onError(error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [onError]);
-
-  if (notes === null) return <Spinner label="Carregando notas..." />;
-
+/**
+ * Todas as notas que a conta alcança — as dela e as compartilhadas com ela. É a lista principal do
+ * app: sem caderno no meio, cada cartão é uma nota com o que ela guarda.
+ */
+export function NotesView({
+  notes,
+  onOpenNote,
+  onCreateNote,
+}: {
+  notes: NoteSummary[];
+  onOpenNote: (id: number) => void;
+  onCreateNote: () => void;
+}) {
   return (
     <div className="view">
       <header className="kind-head">
@@ -42,29 +28,39 @@ export function NotesView({ onOpenNote, onError }: NotesViewProps) {
           <span className="pill-count">{notes.length}</span>
         </h1>
         <p className="view-lede">
-          Todas as notas dos seus cadernos, da mais recente para a mais antiga. Clique para abrir.
+          Cada nota guarda os seus blocos, as tags e os vínculos — e é ela que se compartilha. Clique
+          para abrir; a lista lateral é o caminho curto.
         </p>
       </header>
 
       {notes.length === 0 ? (
         <EmptyState
           title="Nenhuma nota ainda"
-          hint="Escreva o nome da nota na barra de um caderno e dê Enter."
+          hint="A nota é a unidade: escreva o nome dela e o primeiro bloco vem junto."
+          action={
+            <button type="button" className="btn btn-primary" onClick={onCreateNote}>
+              <Plus size={15} weight="bold" /> Nova nota
+            </button>
+          }
         />
       ) : (
         <section className="note-list">
           {notes.map((note) => (
             <article className="note-card" key={note.id}>
-              <button
-                type="button"
-                className="note-card-main"
-                onClick={() => onOpenNote(note.id, note.notebook_id)}
-              >
+              <button type="button" className="note-card-main" onClick={() => onOpenNote(note.id)}>
                 <span className="note-card-title">{note.title || "Nota sem título"}</span>
                 <span className="note-card-excerpt">{note.excerpt || "— vazia —"}</span>
                 <span className="note-card-foot">
-                  <span className="note-card-notebook">{note.notebook_title}</span>
-                  <span className="nb-counts">
+                  <span className="note-card-badges">
+                    <ShareBadge note={note} />
+                    {note.relations_count > 0 && (
+                      <span className="tag-chip" title={`${note.relations_count} vínculos`}>
+                        <GraphIcon size={11} weight="bold" />
+                        {note.relations_count}
+                      </span>
+                    )}
+                  </span>
+                  <span className="note-counts">
                     {KIND_ORDER.filter((kind) => note.counts[kind] > 0).map((kind) => {
                       const KindIcon = KIND_ICONS[kind];
                       return (
@@ -74,6 +70,11 @@ export function NotesView({ onOpenNote, onError }: NotesViewProps) {
                         </span>
                       );
                     })}
+                    {note.tags.map((tag) => (
+                      <span className="tag-chip" key={tag.id}>
+                        {tag.name}
+                      </span>
+                    ))}
                   </span>
                   <span className="note-card-date">{relativeTime(note.updated_at)}</span>
                 </span>

@@ -109,16 +109,11 @@ def _drop(table: str, column: str, values: Iterable[int]) -> None:
 def reset_user(user: Row) -> None:
     """Apaga só os dados do usuário alvo, das folhas para a raiz.
 
-    O que entra na conta é o caderno que ele **possui** (a linha de membro com papel `owner`); o
-    caderno de outro dono em que ele seja convidado nunca entra, mesmo que ele seja membro dele.
+    O que entra na conta são as notas que ele **possui**; a nota de outro dono em que ele seja
+    convidado nunca entra, mesmo que ele a alcance.
     """
     photo = store().snapshot(user.id, fresh=True)
-    owned = {
-        member.notebook_id
-        for member in photo["notebook_members"]
-        if member.user_id == user.id and member.role == "owner"
-    }
-    notes = {note.id for note in photo["notes"] if note.notebook_id in owned}
+    notes = {note.id for note in photo["notes"] if note.owner_id == user.id}
     blocks = {block.id for block in photo["blocks"] if block.note_id in notes}
 
     # a cascata que o banco fazia, agora explícita: menções, tags e vínculos saem antes das linhas
@@ -129,10 +124,9 @@ def reset_user(user: Row) -> None:
     _drop("note_relations", "source_id", notes)
     _drop("note_relations", "target_id", notes)
     _drop("blocks", "$id", blocks)
+    _drop("note_members", "note_id", notes)
+    _drop("note_groups", "note_id", notes)
     _drop("notes", "$id", notes)
-    _drop("notebook_tags", "notebook_id", owned)
-    _drop("notebook_members", "notebook_id", owned)
-    _drop("notebooks", "$id", owned)
     _drop("tags", "owner_id", [user.id])
     _drop("events", "user_id", [user.id])
     store().invalidate(user.id)  # a foto lida aqui ainda é a de antes deste reset
@@ -182,64 +176,21 @@ def seed(reset: bool, email: str | None = None) -> None:
     titles: dict[int, str] = {}
     blocks: list[Row] = []
     for spec in NOTEBOOKS:
-        # A tag é linha própria do dono e entra por `write`; resolvida antes, a transação do caderno
-        # fica só com a entidade principal e as junções dela.
-        notebook_tags = [tag(name) for name in spec["tags"]]
-        with store().transaction() as tx:
-            now = documents.now()
-            notebook = documents.write(
-                "notebooks",
-                documents.record_id("notebooks"),
-                {
-                    "title": spec["title"],
-                    "description": spec["description"],
-                    "owner_id": str(user.id),
-                    "created_at": now,
-                    "updated_at": now,
-                },
-                owner_id=user.id,
-                transaction_id=tx,
-            )
-            store().stage(
-                tx,
-                [
-                    # O dono vem de notebook_members, não do caderno: sem esta linha ele nasce sem
-                    # ninguém. Os ids compostos são o rowId de cada junção, e toda coluna de id é
-                    # `string` no Appwrite — o int do contador vira texto aqui.
-                    documents.operation(
-                        "notebook_members",
-                        f"{user.id}_{notebook.id}",
-                        {
-                            "user_id": str(user.id),
-                            "notebook_id": str(notebook.id),
-                            "role": "owner",
-                            "created_at": now,
-                        },
-                    ),
-                    *[
-                        documents.operation(
-                            "notebook_tags",
-                            f"{notebook.id}_{row.id}",
-                            {
-                                "notebook_id": str(notebook.id),
-                                "tag_id": str(row.id),
-                                "created_at": now,
-                            },
-                        )
-                        for row in notebook_tags
-                    ],
-                    events.operation(user.id, "created", "notebook", spec["title"]),
-                ],
-            )
+        # O seed nasceu com cadernos; agora o agrupamento dele é só um conjunto de tags que desce
+        # para cada nota do grupo — a nota é a unidade, e é ela que tem dono e tags.
+        group_tags = [tag(name) for name in spec["tags"]]
         for note_position, note_spec in enumerate(spec["notes"]):
             note_tags = [tag(name) for name in note_spec["tags"]]
+            for row in group_tags:
+                if all(existing.id != row.id for existing in note_tags):
+                    note_tags.append(row)
             with store().transaction() as tx:
                 now = documents.now()
                 note = documents.write(
                     "notes",
                     documents.record_id("notes"),
                     {
-                        "notebook_id": str(notebook.id),
+                        "owner_id": str(user.id),
                         "title": note_spec["title"],
                         "position": note_position,
                         "created_at": now,
@@ -258,6 +209,7 @@ def seed(reset: bool, email: str | None = None) -> None:
                                 "position": block_position,
                                 "type": block_type,
                                 **payload,
+                                "created_by": str(user.id),
                                 "created_at": now,
                                 "updated_at": now,
                             },
@@ -268,6 +220,18 @@ def seed(reset: bool, email: str | None = None) -> None:
                 store().stage(
                     tx,
                     [
+                        # O dono vem de `note_members`, não da nota: sem esta linha ela nasce sem
+                        # ninguém. Os ids compostos são o rowId de cada junção.
+                        documents.operation(
+                            "note_members",
+                            f"{user.id}_{note.id}",
+                            {
+                                "user_id": str(user.id),
+                                "note_id": str(note.id),
+                                "role": "owner",
+                                "created_at": now,
+                            },
+                        ),
                         *[
                             documents.operation(
                                 "note_tags",
@@ -280,12 +244,12 @@ def seed(reset: bool, email: str | None = None) -> None:
                             )
                             for row in note_tags
                         ],
-                        # A nota, os blocos dela e a auditoria são um commit só.
-                        events.operation(user.id, "created", "note", note_spec["title"]),
+                        # A nota, os blocos dela, as tags e a auditoria são um commit só.
+                        events.operation(user.id, "created", "note", note_spec["title"], note_id=note.id),
                     ],
                 )
             titles[note.id] = note_spec["title"]
-            first_note.setdefault(spec["title"], note.id)
+            first_note.setdefault(note_spec["title"], note.id)
 
     # A relação agora é entre notas: cada vínculo de caderno virou um vínculo entre a primeira
     # nota de cada lado (a tabela de vínculo entre cadernos não existe mais).
@@ -331,7 +295,7 @@ def seed(reset: bool, email: str | None = None) -> None:
             for block in citing:
                 links.reindex_block(store(), block, user.id, tx)
 
-    print(f"seed ok: {len(NOTEBOOKS)} cadernos para {user.email}")
+    print(f"seed ok: {len(titles)} notas para {user.email}")
 
 
 def main(argv: list[str] | None = None) -> int:

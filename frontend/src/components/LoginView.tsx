@@ -43,7 +43,7 @@ export function LoginView({ onLoggedIn }: LoginViewProps) {
           </span>
           <span className="wordmark">AnotAI</span>
         </div>
-        <p className="panel-hint">Entre com a sua conta para abrir os seus cadernos.</p>
+        <p className="panel-hint">Entre com a sua conta para abrir as suas notas.</p>
 
         <label className="form-field">
           <span className="form-label">E-mail</span>

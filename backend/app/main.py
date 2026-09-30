@@ -1,4 +1,4 @@
-"""FastAPI application for AnotAI: users, notebooks, notes, blocks, tags, relations.
+"""FastAPI application for AnotAI: users, notes, blocks, tags, relations.
 
 O app não guarda mais dado nenhum em SQLite: `app/store/` fala com o Appwrite (TablesDB + Storage) e
 o processo é um BFF fino — contrato HTTP intacto, regra de negócio e agregação aqui.
@@ -22,7 +22,6 @@ from .routers import (
     events,
     groups,
     media,
-    notebooks,
     notes,
     relations,
     search,
@@ -62,7 +61,6 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(admin.router)
-app.include_router(notebooks.router)
 app.include_router(notes.router)
 app.include_router(blocks.router)
 app.include_router(tags.router)

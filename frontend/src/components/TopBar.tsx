@@ -1,11 +1,11 @@
-import { CloudArrowUp, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Notebook, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { Bell, CloudArrowUp, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import type { View } from "../App";
 import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, KIND_ORDER } from "../lib/format";
-import { ActivityBell } from "./ActivityBell";
+import { ActivityPanel } from "./ActivityBell";
 import { Key } from "./ui";
 import type { BlockType, EventFeed, Stats, User } from "../lib/types";
 
@@ -32,7 +32,6 @@ interface TopBarProps {
   onChangePassword: () => void;
   onBellOpenChange: (open: boolean) => void;
   onAllRead: () => void;
-  onNewNotebook: () => void;
   onNewNote: () => void;
 
   sidebarOpen: boolean;
@@ -58,15 +57,28 @@ export function TopBar({
   onChangePassword,
   onBellOpenChange,
   onAllRead,
-  onNewNotebook,
   onNewNote,
 
   sidebarOpen,
 }: TopBarProps) {
-  const isNotebookSection =
-    view.kind === "notebooks" || view.kind === "notebook" || view.kind === "note";
+  const isNoteSection = view.kind === "notes" || view.kind === "note";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  /** Onde ancorar a atividade: ela abre do menu do nome, mas o painel encosta no cabeçalho. */
+  const [bellBox, setBellBox] = useState<{ top: number; right: number } | null>(null);
+  const unread = feed?.unread ?? 0;
+
+  /**
+   * **Atividade** fecha o menu do nome e abre o painel no canto direito, como o menu de ⋯ — dentro do
+   * popover ele ficaria clipado e por cima do próprio menu.
+   */
+  const openActivity = () => {
+    const rect = menuRef.current?.getBoundingClientRect();
+    setBellBox(
+      rect ? { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) } : null,
+    );
+    onBellOpenChange(true);
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -165,7 +177,7 @@ export function TopBar({
         key={kind}
         className={classes.join(" ")}
         onClick={() => onNavigate({ kind: "kind", blockType: kind })}
-        title={`${total} ${KIND_LABELS[kind]} em todos os cadernos`}
+        title={`${total} ${KIND_LABELS[kind]} em todas as notas`}
         aria-label={`Ver ${total} ${KIND_LABELS[kind]}`}
         aria-hidden={measurable || undefined}
         tabIndex={measurable ? -1 : undefined}
@@ -186,20 +198,12 @@ export function TopBar({
     onSelect: () => void;
   }[] = [
     {
-      key: "notebooks",
-      label: "Cadernos",
-      icon: Notebook,
-      count: stats?.notebooks,
-      active: isNotebookSection,
-      onSelect: onHome,
-    },
-    {
       key: "notes",
       label: "Notas",
       icon: NoteBlank,
       count: stats?.notes,
-      active: view.kind === "notes",
-      onSelect: () => onNavigate({ kind: "notes" }),
+      active: isNoteSection,
+      onSelect: onHome,
     },
     {
       key: "tags",
@@ -219,7 +223,7 @@ export function TopBar({
     },
   ];
 
-  /** O chip de uma seção (Cadernos, Notas, Tags, Relações): igual na linha e na régua. */
+  /** O chip de uma seção (Notas, Tags, Relações): igual na linha e na régua. */
   const sectionChip = (section: (typeof sections)[number], measurable = false) => {
     const SectionIcon = section.icon;
     return (
@@ -245,8 +249,8 @@ export function TopBar({
         type="button"
         className="topbar-toggle"
         onClick={onToggleSidebar}
-        title={sidebarOpen ? "Esconder a lista de cadernos" : "Mostrar a lista de cadernos"}
-        aria-label={sidebarOpen ? "Esconder a lista de cadernos" : "Mostrar a lista de cadernos"}
+        title={sidebarOpen ? "Esconder a lista de notas" : "Mostrar a lista de notas"}
+        aria-label={sidebarOpen ? "Esconder a lista de notas" : "Mostrar a lista de notas"}
         aria-pressed={sidebarOpen}
       >
         <SidebarSimple size={17} weight="bold" />
@@ -354,15 +358,6 @@ export function TopBar({
           <button
             type="button"
             className="btn btn-compact create-btn"
-            onClick={onNewNotebook}
-            title="Novo caderno"
-          >
-            <Plus size={13} weight="bold" />
-            <Notebook size={16} weight="bold" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-compact create-btn"
             onClick={onNewNote}
             title="Nova nota"
           >
@@ -386,6 +381,47 @@ export function TopBar({
           {menuOpen && (
             <div className="user-popover" role="menu">
               <p className="user-popover-head">{user.email}</p>
+              <button
+                type="button"
+                role="menuitem"
+                className="user-popover-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  openActivity();
+                }}
+              >
+                <Bell size={14} weight="bold" />
+                Atividade
+                {unread > 0 && <span className="user-popover-hint">{unread}</span>}
+              </button>
+              {user.role === "admin" && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="user-popover-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenAdmin();
+                  }}
+                >
+                  <Users size={14} weight="bold" />
+                  Admin: usuários e grupos
+                </button>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                className="user-popover-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenDrive();
+                }}
+              >
+                <CloudArrowUp size={14} weight="bold" />
+                Backup no Drive
+                <span className="user-popover-hint">{driveConnected ? "ligado" : "desligado"}</span>
+              </button>
+              <span className="user-popover-sep" aria-hidden="true" />
               <button
                 type="button"
                 role="menuitem"
@@ -422,35 +458,13 @@ export function TopBar({
             </div>
           )}
         </div>
-        <ActivityBell
+        <ActivityPanel
           feed={feed}
           open={bellOpen}
+          anchor={bellBox}
           onOpenChange={onBellOpenChange}
           onAllRead={onAllRead}
         />
-        {user.role === "admin" && (
-          <button
-            type="button"
-            className={view.kind === "admin" ? "topnav-chip is-active" : "topnav-chip"}
-            onClick={onOpenAdmin}
-            title="Admin: usuários e grupos"
-            aria-label="Admin"
-            aria-pressed={view.kind === "admin"}
-          >
-            <Users size={15} weight="bold" />
-          </button>
-        )}
-        <button
-          type="button"
-          className="icon-btn is-cloud"
-          onClick={onOpenDrive}
-          title="Backup no Google Drive"
-          aria-label="Backup no Google Drive"
-          aria-pressed={driveConnected}
-        >
-          <CloudArrowUp size={17} />
-          {driveConnected && <span className="cloud-dot" aria-hidden="true" />}
-        </button>
         <button
           type="button"
           className="icon-btn"
@@ -460,9 +474,14 @@ export function TopBar({
         >
           {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
         </button>
-        <button type="button" className="search-pill" onClick={onOpenSearch}>
+        <button
+          type="button"
+          className="search-pill"
+          onClick={onOpenSearch}
+          title="Buscar (Ctrl+K)"
+          aria-label="Buscar"
+        >
           <MagnifyingGlass size={15} />
-          <span className="search-placeholder">Buscar</span>
           <span className="search-keys">
             <Key>Ctrl</Key>
             <Key>K</Key>

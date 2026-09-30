@@ -1,13 +1,13 @@
 # NotAI
 
-Caderno de anotações para tudo o que se escreve — código, receita, ideia, reunião. Cada **caderno**
-guarda **notas**; cada nota é uma sequência de **blocos** de seis tipos: `texto`, `código`, `url`,
-`imagem`, `vídeo`, `pdf`. O texto corre livre e o tipo do bloco troca no teclado, sem tirar a mão da
-linha.
+Caderno de anotações para tudo o que se escreve — código, receita, ideia, reunião. A **nota** é a
+unidade: tem dono, guarda os **blocos** de seis tipos — `texto`, `código`, `url`, `imagem`, `vídeo`,
+`pdf` — e é ela que se compartilha com grupos e se relaciona com outras notas. O texto corre livre e
+o tipo do bloco troca no teclado, sem tirar a mão da linha.
 
-Cada pessoa entra com **e-mail e senha** e enxerga os próprios cadernos — e os que o dono
-compartilhou com os grupos dela. Fora desses, notas, blocos, tags, vínculos e arquivos são de quem os
-criou. Quem cria as contas e os grupos é o **admin**, na área **Admin**.
+Cada pessoa entra com **e-mail e senha** e enxerga as próprias notas — e as que o dono compartilhou
+com os grupos dela. Fora dessas, blocos, tags, vínculos e arquivos são de quem os criou. Quem cria as
+contas e os grupos é o **admin**, na área **Admin**.
 
 - Backend: FastAPI como BFF fino, com **Appwrite como camada de dados** (`backend/`)
 - Frontend: React 19 + Vite + TypeScript (`frontend/`)
@@ -27,7 +27,8 @@ python -m venv .venv
 ```
 
 O schema do Appwrite é **código**: `tools/appwrite_schema.py --spec` imprime o que está declarado,
-`--check` diz o que falta e `--apply` cria (idempotente). Nada de migração no start do app.
+`--check` diz o que falta, `--apply` cria (idempotente) e `--apply --prune` apaga da instância o que
+saiu do schema — a tabela ou a coluna que ninguém mais usa. Nada de migração no start do app.
 
 No primeiro start com a tabela de usuários vazia o app cria o admin e imprime a senha **uma vez** no log:
 
@@ -35,8 +36,10 @@ No primeiro start com a tabela de usuários vazia o app cria o admin e imprime a
 [notai] admin criado: admin@notai.local / senha k1Ki2YJGUvrf_8mQ — troque com `python manage.py set-password <e-mail>`
 ```
 
-`CADERNO_ADMIN_EMAIL` e `CADERNO_ADMIN_PASSWORD` escolhem esse primeiro admin (sem a senha na
-variável, ela é sorteada e mostrada no log) — o admin entra, troca a senha e cria as contas dos outros.
+`CADERNO_ADMIN_EMAIL` e `CADERNO_ADMIN_PASSWORD` (veja `backend/.env.example`) escolhem esse admin —
+sem a senha na variável, ela é sorteada e mostrada no log — o admin entra, troca a senha e cria as
+contas dos outros. (`CADERNO_` é o prefixo das variáveis do app: o nome do pacote é anterior ao
+AnotAI e não mudou.)
 
 Frontend (porta 5173, proxy de `/api` e `/media` para o backend):
 
@@ -64,32 +67,33 @@ pelo próprio painel ele fica sem uso.
 ## Dados
 
 Tudo mora no **Appwrite** (TablesDB + Storage), no database de `APPWRITE_DATABASE_ID` — o Postgres/MariaDB
-do Appwrite é o banco de verdade. O backend é a única porta: o front nunca fala com o Appwrite, então
-não há SDK, CORS nem cookie de terceiro no navegador.
+do Appwrite é o banco de verdade. A **nota** é a unidade: ela tem dono (`owner_id`), guarda os blocos
+e é ela que se compartilha e se relaciona. O backend é a única porta: o front nunca fala com o
+Appwrite, então não há SDK, CORS nem cookie de terceiro no navegador.
 
 | tabela | o que guarda | chave (`$id`) |
 | --- | --- | --- |
 | `users` | conta, papel, `is_active`, hash da senha, `activity_seen_at`, `welcome_seen_at` | id numérico (legado verbatim) |
 | `sessions` | sessão do cookie: sha256 do token **truncado a 32 chars** (o `$id` aceita 36) | id truncado |
-| `notebooks`, `notes`, `blocks` | o conteúdo, com `position` para a ordem; em `blocks`, `created_by` diz quem escreveu | id numérico |
-| `notebook_members` | papel do usuário no caderno (`owner`/`editor`/`viewer`) | `<user_id>_<notebook_id>` |
+| `notes`, `blocks` | o conteúdo, com `position` para a ordem; a nota é a unidade (tem `owner_id`), e em `blocks` o `created_by` diz quem escreveu | id numérico |
+| `note_members` | papel do usuário na nota (`owner`/`editor`/`viewer`) | `<user_id>_<note_id>` |
 | `groups`, `group_members` | grupo de contas (o público do compartilhamento, criado pelo admin) e quem está nele | id numérico / `<group_id>_<user_id>` |
-| `notebook_groups` | caderno compartilhado com um grupo, com o papel que vale para todo mundo dele | `<notebook_id>_<group_id>` |
+| `note_groups` | nota compartilhada com um grupo, com o papel que vale para todo mundo dele | `<note_id>_<group_id>` |
 | `tags` | tag por dono; `name_key = "<owner_id>::<nome>"` com índice unique faz o nome ser único na conta | id numérico |
-| `notebook_tags`, `note_tags` | tag aplicada a caderno/nota | `<caderno ou nota>_<tag>` |
+| `note_tags` | tag aplicada à nota | `<nota>_<tag>` |
 | `note_relations`, `block_links` | vínculos declarados e menções `[[…]]`; índice unique no par | id numérico |
-| `media_files` + bucket `media` | arquivos enviados; o arquivo é servido para o dono e para quem alcança o caderno que o cita | nome do arquivo |
-| `events` | auditoria (o sino), uma linha por escrita, com o `notebook_id` de onde ela aconteceu | id numérico |
+| `media_files` + bucket `media` | arquivos enviados; o arquivo é servido para o dono e para quem alcança a nota que o cita | nome do arquivo |
+| `events` | auditoria (a **Atividade**), uma linha por escrita, com o `note_id` de onde ela aconteceu | id numérico |
 | `drive_files`, `drive_state` | estado do export para o Drive | `<user_id>_<note_id>` / `<user_id>_<chave>` |
 | `counters` | contador de id por família (incremento atômico) | nome da família |
 
 Convenções que valem a pena saber antes de mexer:
 
-- **Sem cascata no servidor**: apagar caderno/nota/usuário é código nosso (`purge_user` no admin), em
-  ordem, idempotente.
+- **Sem cascata no servidor**: apagar nota/usuário é código nosso (`purge_user` no admin), em ordem,
+  idempotente.
 - **Escrita + auditoria no mesmo commit** via transação do Appwrite; linha repetida ou índice único
   violado aparece no commit e vira `Conflict`.
-- **Agregação é nossa**: o Appwrite não tem `GROUP BY`/`JOIN`, então contagens, afinidade e busca
+- **Agregação é nossa**: o Appwrite não tem `GROUP BY`/`JOIN`, então contagens, vínculos e busca
   filtram em Python sobre uma foto curta por usuário (`store().snapshot`).
 - **A foto é cache de escrita**: a linha gravada entra nela na hora (vem da própria escrita) e o que
   é apagado sai dela — o BFF não relê o Appwrite depois de escrever, porque nesta instância a
@@ -97,7 +101,7 @@ Convenções que valem a pena saber antes de mexer:
   requisição custava uma dúzia de idas de ~40 ms; hoje a leitura quente são as duas do login.
   **Comitar uma transação publica na foto de cada dono o que ela escreveu** (`Store.transaction`): o
   `pending` é por thread, então esquecer isso prendia a linha — a tag criada sumia da lista, do
-  seletor e do caderno até o TTL de 30 s, e só às vezes.
+  seletor e da nota até o TTL de 30 s, e só às vezes.
 - **Upload**: o bucket está limitado a **30 MB** pelo `_APP_STORAGE_LIMIT` do servidor; para os 256 MB
   do app é preciso subir essa variável no `.env` do Appwrite e recriar o stack. A **lista de
   extensões** aceitas também é do schema (`MEDIA_EXTENSIONS`): o `--check` compara com o bucket e o
@@ -106,38 +110,38 @@ Convenções que valem a pena saber antes de mexer:
 - **Backup** passa a ser do Appwrite: `mysqldump` do banco + volumes `appwrite-uploads` e o `.env`
   (`_APP_OPENSSL_KEY_V1`). Os tokens do Drive continuam em `backend/data/drive_*.json`.
 
-Ferramentas em `backend/tools/`: `appwrite_schema.py` (schema como código), `reset_appwrite.py`
-(zera tabelas, bucket, contadores e sessões, e recria só o admin — `--dry-run` mostra antes),
-`migrate_sqlite.py` (SQLite → Appwrite, idempotente), `parity_check.py` (grava/repete um roteiro de
-requisições e compara as respostas), `test_appwrite_schema.py` (idempotência offline) e
-`test_store_live.py` (a camada de dados contra a instância real).
+Ferramentas em `backend/tools/`: `appwrite_schema.py` (schema como código; o `--apply --prune` apaga o
+que saiu dele), `reset_appwrite.py` (zera tabelas, bucket, contadores e sessões, e recria só o admin —
+`--dry-run` mostra antes), `migrate_sqlite.py` (SQLite → Appwrite, idempotente), `parity_check.py`
+(grava/repete um roteiro de requisições e compara as respostas), `test_appwrite_schema.py` (idempotência
+offline) e `test_store_live.py` (a camada de dados contra a instância real).
 
 ## Usuários
 
 - **Entrar**: só com e-mail e senha; a sessão é um cookie `notai_session` (httpOnly, 30 dias).
   Não existe autocadastro: sem conta, o admin cria uma.
-- **Admin**: o chip de admin (só aparece para quem tem o papel) abre a área **Admin**, em duas abas.
-  **Usuários** lista todo mundo com cadernos, notas, blocos e espaço de mídia, cria conta, redefine
-  senha, ativa/desativa e exclui. Excluir leva junto cadernos, notas, vínculos e os arquivos enviados
-  — o diálogo diz isso antes. O admin não consegue rebaixar, desativar nem excluir a própria conta, e
+- **Admin**: o item **Admin** do menu do nome (só aparece para quem tem o papel) abre a área
+  **Admin**, em duas abas. **Usuários** lista todo mundo com notas, blocos e espaço de mídia, cria
+  conta, redefine senha, ativa/desativa e exclui. Excluir leva junto notas, blocos, vínculos e os
+  arquivos enviados — o diálogo diz isso antes. O admin não consegue rebaixar, desativar nem excluir a própria conta, e
   o último admin ativo fica protegido. **Grupos** cria, renomeia e apaga os grupos do
   compartilhamento e decide quem está em cada um: o grupo nasce vazio e quem entra depois já alcança
   tudo o que o grupo alcança.
 - **Primeiro login**: a conta que nunca dispensou a introdução cai numa tela de **boas-vindas** —
-  cartões com o que o app faz e por onde se chega a cada coisa (o cartão do **Admin** só aparece para
-  quem tem o papel). No fim, **Não mostrar de novo** grava `welcome_seen_at` na conta e leva para o
-  primeiro caderno; sair da tela por outro caminho não marca nada, e ela volta no próximo login. A
-  mesma tela fica no menu do nome, em **Como usar**, para quem quiser reler.
-- **Qualquer um**: o chip do próprio nome (antes do botão do Drive) tem **Como usar**, **Trocar senha**
-  e **Sair**. Trocar a senha derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de
-  alguém, derruba todas.
-- **Sem acesso**: id de caderno, nota, bloco, tag ou arquivo fora dos cadernos que aquela conta
-  alcança responde `404` (não `403`, para não confirmar que existe), e `401` aparece quando a sessão
-  expira ou foi revogada — o app volta para a tela de entrada.
-- **Atividade**: cada escrita na API vira uma linha em `events` (quem, o quê, em quê) e o sino mostra
-  as 5 últimas. O admin enxerga a plataforma inteira, com o nome de quem agiu; uma conta comum enxerga
-  as próprias ações e as do caderno compartilhado em que participa. Apagar uma conta leva junto as
-  linhas dela — o que sobra é o registro de quem continua.
+  cinco cartões curtos com o que o app faz. No fim, **Não mostrar de novo** grava `welcome_seen_at`
+  na conta e leva para a primeira nota; sair da tela por outro caminho não marca nada, e ela volta no
+  próximo login. A mesma tela fica no menu do nome, em **Como usar**, para quem quiser reler.
+- **Qualquer um**: o menu do próprio nome — o único lugar com as ações da conta — tem
+  **Atividade** (as 5 últimas interações, com o contador do que não foi visto), **Admin** (para quem
+  tem o papel), **Backup no Drive**, **Como usar**, **Trocar senha** e **Sair**. Trocar a senha
+  derruba as outras sessões daquela pessoa; o admin, ao redefinir a senha de alguém, derruba todas.
+- **Sem acesso**: id de nota, bloco, tag ou arquivo fora das notas que aquela conta alcança responde
+  `404` (não `403`, para não confirmar que existe), e `401` aparece quando a sessão expira ou foi
+  revogada — o app volta para a tela de entrada.
+- **Atividade**: cada escrita na API vira uma linha em `events` (quem, o quê, em quê) e a página do
+  menu mostra as 5 últimas. O admin enxerga a plataforma inteira, com o nome de quem agiu; uma conta
+  comum enxerga as próprias ações e as da nota compartilhada em que participa. Apagar uma conta leva
+  junto as linhas dela — o que sobra é o registro de quem continua.
 - **Fora do app**: quando a senha se perde, `backend/manage.py` resolve sem servidor no ar:
 
 ```bash
@@ -157,15 +161,14 @@ mesmo e-mail em quinze minutos respondem `429` com `Retry-After`.
 | Atalho | Efeito |
 | --- | --- |
 | `/` (em bloco vazio) | Abre o menu de tipo: `1`–`6` ou setas + `Enter` escolhe texto, código, url, imagem, vídeo ou pdf |
-| `#` (em bloco vazio) | Abre a paleta de tags: filtra as existentes, `Enter` aplica/remove, ou cria a tag digitada. A tag nova entra na nota e no caderno |
+| `#` (em bloco vazio) | Abre a paleta de tags: filtra as existentes, `Enter` aplica/remove, ou cria a tag digitada — a tag nova já entra na nota |
 | `[[` ou `@` (em bloco de texto) | Abre o seletor de notas: filtra por título, `Enter` insere `[[Título]]` e cria a menção |
 | `Ctrl+Shift+L` | Mesmo menu de tipo, para quando o bloco já tem texto (abre um bloco novo do tipo escolhido) |
 | Clicar no selo de tipo | Alternativa de mouse ao `/`, em qualquer bloco |
-| `Ctrl+K` | Busca global em cadernos, notas, blocos e tags |
+| `Ctrl+K` | Busca global em notas, blocos e tags |
 | `Enter` | Novo bloco (exceto em blocos de código, onde quebra linha) |
 | `Shift+Enter` | Quebra de linha dentro do bloco |
-| `Enter` na barra do caderno | Cria a nota com o nome digitado na barra e já abre para escrever |
-| Digitar no caderno | Qualquer letra pula direto para a barra de escrever |
+| Título da nota | O primeiro campo do editor: quem escreve nela pode trocá-lo, e a nota é renomeada ao sair do campo |
 | `Alt+Enter` | Novo bloco de código mesmo dentro de um bloco de código |
 | `Backspace` | Em um bloco vazio, apaga o bloco e volta o foco para o anterior |
 | `Arrastar` o handle `⠿` | Reordena blocos |
@@ -175,53 +178,58 @@ mesmo e-mail em quinze minutos respondem `429` com `Retry-After`.
 > `Ctrl+Espaço` é o alternador de IME — nenhum dos dois chega à página. Os gatilhos digitados (`/`,
 > `#`) funcionam em qualquer navegador e não colidem com atalhos do browser ou do sistema.
 
-Ações destrutivas (apagar caderno, nota, tag ou vínculo) passam por um modal próprio, com `Esc` para
+Ações destrutivas (apagar nota, tag ou vínculo) passam por um modal próprio, com `Esc` para
 cancelar e `Enter` para confirmar. Avisos de sucesso e erro aparecem em toasts na lateral direita,
 logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
 
 ## Tela
 
 - Sem sessão válida o app abre na tela de entrada (e-mail e senha); a lista, os contadores, a busca,
-  as tags, o grafo e o Drive passam a mostrar só o que é daquela conta. A navegação (Cadernos, Notas,
-  Tags, Relações) e, para o admin, **Usuários**, aparece no pipe da barra superior, ao lado dos
-  **contadores por tipo de bloco** — os dois lados só com ícone + número (o nome aparece no hover),
-  somando todos os cadernos no caso dos tipos. Quando a janela é estreita demais para a barra inteira,
-  o que não cabe vai para o menu **…** (contadores de tipo e, se preciso, também a navegação), de modo
-  que nada fique fora de alcance — antes os contadores simplesmente desapareciam. Clicar num contador
-  abre a lista achatada daquele tipo:
-  sem agrupamento por caderno, o mais recente primeiro, e cada cartão mostra a origem
-  (`caderno › nota`) e um botão **Abrir nota**.
-- No canto de baixo da coluna de conteúdo flutua o cluster de **ações rápidas**, que muda com a tela:
-  listando notas/tags/relações ele só oferece **+ caderno**; dentro de um caderno, também **+ nota**;
-  dentro de uma nota, ainda **voltar para os cadernos** (útil quando a página rolou e o cabeçalho saiu
-  de vista). A nota entra no caderno aberto — ou no primeiro da lista; sem nenhum caderno, o botão cria
-  o caderno, que já nasce com uma nota.
-- **Notas**, logo depois de Cadernos, abre a lista de todas as notas de todos os cadernos — da mais
-  recente para a mais antiga, com o trecho, o caderno de origem, as contagens por tipo e há quanto
-  tempo foi mexida. Um clique abre a nota (mesmo vindo de outro caderno).
-- **Usuários** (só admin): a lista de contas com cadernos, notas, blocos e espaço de mídia, o
+  as tags, o grafo e o Drive passam a mostrar só o que é daquela conta. A navegação — **Notas** (a
+  home), **Tags** e **Relações** — e os **contadores por tipo de bloco** ficam no cabeçalho, todos só
+  com ícone + número (o nome aparece no hover), com as seções e os contadores separados por um pipe.
+  Quando a janela é estreita demais para a barra inteira, o que não cabe vai para o menu **⋯**
+  (primeiro os contadores de tipo; se nem as seções couberem, elas também), de modo que nada fique
+  fora de alcance — antes os contadores simplesmente desapareciam. Clicar num contador abre a lista
+  achatada daquele tipo: o mais recente primeiro, sem agrupamento, e cada cartão mostra a **nota** de
+  origem e um botão **Abrir nota**.
+- **+ Nota** cria a nota com o título vazio (`Título da nota`) e já abre o editor — o botão fica no
+  cabeçalho, ao lado do menu do nome, e no alto da lista lateral, ao lado do botão que a esconde. Não
+  existe mais o cluster de ações rápidas que flutuava no canto de baixo da coluna de conteúdo.
+- A lista lateral é a das **notas**: filtro por título, trecho ou tag, um cartão por nota com o chip
+  de compartilhamento (só o ícone), a contagem de blocos, os contadores por tipo e os vínculos;
+  embaixo, a nuvem de tags — cada uma com quantas notas a usam — e o rodapé `N notas · N blocos · N
+  tags`. O botão no canto esquerdo do cabeçalho esconde a lista e a traz de volta (o da própria lista
+  só esconde); o estado fica salvo no navegador, e com ela escondida o conteúdo usa a largura extra.
+- **Notas** é a home: a lista de todas as notas que a conta alcança — as dela e as compartilhadas com
+  ela —, da mais recente para a mais antiga, com o trecho, o chip de compartilhamento, as tags, o
+  número de vínculos, as contagens por tipo e há quanto tempo foi mexida. Um clique abre a nota.
+- **Usuários** (só admin, pelo menu do nome): a lista de contas com notas, blocos e espaço de mídia, o
   formulário de criação e as ações de cada linha — redefinir senha, ativar/desativar e excluir, com o
   mesmo modal de confirmação das outras ações destrutivas. Detalhes em [Usuários](#usuários).
-- O **sino** ao lado do seu nome conta as interações ainda não vistas e mostra as 5 últimas. Ele abre
-  sozinho ao entrar quando há alguma coisa no feed; ao fechar (clique fora, `Esc` ou novo clique no
-  sino), tudo ali conta como visto e o contador zera — inclusive na conta, não só neste navegador.
+- O menu do nome reúne tudo o que é da conta: **Atividade** (as 5 últimas interações, com o contador
+  do que não foi visto), **Admin** (só para quem tem o papel), **Backup no Drive**, **Como usar**,
+  **Trocar senha** e **Sair** — as ações da conta ficaram todas aqui, sem chips soltos no cabeçalho.
+  **Atividade** abre um painel ancorado no canto direito do cabeçalho e ele abre sozinho ao entrar
+  quando há alguma coisa no feed (uma vez por login); ao fechar (clique fora, `Esc` ou novo clique no
+  item), tudo ali conta como visto e o contador zera — inclusive na conta, não só neste navegador.
   Cada linha diz quem fez, o quê e em quê: “criou a nota «X»”, “marcou «Y» com a tag «ideias»”,
-  “apagou o caderno «Z»”.
-- O chip com o próprio nome, à direita antes do botão do Drive, abre **Trocar senha** e **Sair**.
-- No cabeçalho do caderno do **dono**, **Compartilhar** abre o painel de quem alcança aquele caderno:
-  cada conta com o papel (`dono`/`editor`/`leitor`) e o grupo que a trouxe. Ali ele escolhe um grupo
-  com "pode escrever" ou "só pode ler", troca o papel de um grupo já compartilhado e **Remover**. O
-  botão não aparece para quem recebeu o caderno — nesse caso o chip já diz que ele é compartilhado. O
-  chip vale nos **dois sentidos**, nas três listas onde um caderno aparece (barra lateral, lista de
-  cadernos e cabeçalho do caderno aberto): o que chegou de outra conta diz **Compartilhado por
-  «dono» · «papel»**, e o meu que saiu daqui diz **Compartilhado com «grupos» · «N pessoas»** — sem
-  ele o dono não tinha como saber, olhando a lista, qual dos cadernos dele estava compartilhado. Nos
-  cadernos de outra conta o que não é seu não aparece: título e descrição viram leitura, o caderno não
-  se apaga e, para quem só lê, também não há barra de nota nova, lixeira de nota nem edição de tag.
-- Em caderno compartilhado, **cada bloco que não é seu traz o nome de quem o escreveu** — embaixo do
+  “apagou a nota «Z»”.
+- No cabeçalho da nota aberta: **voltar para Notas**, o **título** editável por quem escreve nela, a
+  linha de tags e a linha de estado com o chip de compartilhamento, a contagem de blocos, o
+  "atualizado há X" e as ações **Compartilhar** e apagar a nota — as duas só para o dono.
+- **Compartilhar** abre o painel **da nota**: quem alcança (o dono, os membros diretos e quem veio por
+  grupo, cada um com o papel e o grupo que o trouxe), os grupos com papel (`pode escrever` ou `só
+  pode ler`, trocável no próprio painel) e os grupos que ainda podem ser adicionados. O chip vale nos
+  **dois sentidos**, nos três lugares onde a nota aparece (barra lateral, cartões da lista e cabeçalho
+  da nota aberta): o que chegou de outra conta diz **Compartilhado por «dono» · «papel»**, e o meu que
+  saiu daqui diz **Compartilhado com «grupos» · «N pessoas»** — sem ele o dono não tinha como saber,
+  olhando a lista, qual das notas dele estava compartilhada. Numa nota de outra conta o que não é seu
+  não aparece: o título vira leitura, a nota não se apaga e as ações de dono saem da tela.
+- Em nota compartilhada, **cada bloco que não é seu traz o nome de quem o escreveu** — embaixo do
   tipo, dentro da nota, e no pé do cartão da lista por tipo. Nos próprios blocos não aparece nome
-  nenhum, e os blocos gravados antes desta coluna saem com o nome do dono do caderno.
-- **Bloco de outra conta é leitura.** Nem o dono do caderno edita ou apaga o bloco de um membro, e o
+  nenhum, e os blocos gravados antes desta coluna saem com o nome do dono da nota.
+- **Bloco de outra conta é leitura.** Nem o dono da nota edita ou apaga o bloco de um membro, e o
   membro também não toca no do dono: o conteúdo responde por quem o escreveu (a API responde `403`).
   Na tela, o bloco alheio fica sem textarea editável, sem troca de tipo, sem upload e sem lixeira; o
   **tipo** continua servindo para criar um bloco novo, seu, logo depois.
@@ -243,25 +251,18 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   janela. PDF de outro site só aparece ali quando o site dele deixa ser emoldurado (é para isso que a
   CSP tem `frame-src 'self' https:`); quando não deixa, a aba nova é o caminho. `Esc`, clique no fundo
   ou no X fecham.
-- A lista de cadernos pode ser escondida e trazida de volta pelo botão no canto esquerdo da barra
-  superior (ou pelo botão no cabeçalho da própria lista). O estado fica salvo no navegador, e com a
-  lista escondida o conteúdo usa a largura extra.
-- A afinidade de um caderno fica atrás do botão **Afinidade** no cabeçalho: um modal que lista os
-  outros cadernos alcançados pelas notas dele (relações declaradas e menções), com a contagem. É
-  derivada, não declarada — quem cria vínculo são as notas. A visão global (grafo de notas) fica no
-  item **Relações** da barra superior.
-- Os contadores no cabeçalho do caderno são só ícone + número, e tipos com zero não aparecem.
-- O ícone de nuvem na barra (antes do tema) abre o **Backup no Google Drive**. Ele ganha um ponto
-  azul quando a conta está conectada.
+- O grafo em **Relações** colore cada nota pela **primeira tag** dela — a legenda lista as tags que
+  aparecem no desenho, e nota sem tag fica na cor neutra.
+- O **Backup no Drive**, no menu do nome, abre o painel do export; o item mostra `ligado` quando a
+  conta já está conectada.
 
 As edições são salvas sozinhas (debounce de 700 ms) e o que ainda não foi enviado é descarregado ao
 sair da nota.
 
 ## Ligações entre notas
 
-O vínculo é **entre notas**, não entre cadernos: relacionar "Estudos de Rust" com "Backend" diz pouco,
-enquanto ligar "Ownership em uma frase" a "Gestão de Memória no C++" diz exatamente qual conceito
-conecta os dois. São duas camadas:
+O vínculo é **entre notas**: ligar "Ownership em uma frase" a "Gestão de Memória no C++" diz
+exatamente qual conceito conecta as duas. São duas camadas:
 
 - **Relação declarada** — no rodapé da nota aberta, **relacionar com…** abre um seletor de notas com
   campo de rótulo opcional (`pré-requisito`, `complementa`, o que quiser). Aparece nos dois lados.
@@ -272,28 +273,26 @@ conecta os dois. São duas camadas:
   então renomear a nota alvo reescreve o `[[…]]` nos blocos que a citam em vez de quebrar o vínculo.
   Título inexistente simplesmente não vira ligação (o texto fica como está).
 
-A **afinidade de caderno** é consequência: soma as relações e as menções que atravessam cadernos e
-conta quantas notas ligam cada par. Ela não pode ser declarada à mão — se as notas não se ligam, os
-cadernos não têm afinidade. Cadernos com a mesma nota repetida não contam duas vezes.
-
-A tela **Relações** é só leitura: o grafo desenha uma bolinha por nota ligada (cor = caderno), com
-linha cheia para relação e tracejada para menção, e a lista embaixo mostra cada vínculo, com remover
-só nas relações declaradas (uma menção sai editando o texto).
+A tela **Relações** é só leitura: o grafo desenha uma bolinha por nota ligada, colorida pela
+**primeira tag** da nota (a legenda lista essas tags; sem tag, a cor neutra), com linha cheia para
+relação e tracejada para menção, e a lista embaixo mostra cada vínculo, com remover só nas relações
+declaradas (uma menção sai editando o texto).
 
 ## Backup no Google Drive
 
-O app mantém uma cópia das notas no Drive do próprio usuário, um `.md` por nota, em
-`NotAI/<Caderno>/<Nota>.md`. É **mão única**: o NotAI escreve, nunca lê nem apaga nada no Drive —
+O app mantém uma cópia das notas no Drive do próprio usuário, um `.md` por nota, na raiz:
+`NotAI/<Nota>.md`. É **mão única**: o NotAI escreve, nunca lê nem apaga nada no Drive —
 apagar uma nota no app deixa o arquivo lá (órfão, para remoção manual). O escopo é `drive.file`, então
 o app só enxerga o que ele mesmo criou.
 
 **Cada conta conecta a própria conta Google** (o cliente OAuth e o token ficam em
 `backend/data/drive_client.<id>.json` e `drive_token.<id>.json`, e o estado do export em `drive_state`
-por usuário): cada um exporta só as próprias notas, e a conexão de um não aparece para os outros.
-Quem não conectou simplesmente não tem backup — o painel explica isso.
+por usuário): cada conta exporta as notas que alcança — as dela e as compartilhadas com ela —, e a
+conexão de um não aparece para os outros. Quem não conectou simplesmente não tem backup — o painel
+explica isso.
 
-Cada arquivo começa com front matter (`notebook`, `note`, `tags`, `related`, `mentions`, `created`,
-`updated`, `notai_id`) e depois repete o texto do bloco, a cerca de código com a linguagem,
+Cada arquivo começa com front matter (`note`, `tags`, `related`, `mentions`, `created`, `updated`,
+`notai_id`) e depois repete o texto do bloco, a cerca de código com a linguagem,
 `[rótulo](url)` para url/vídeo, `[PDF rótulo](url)` para pdf e `![rótulo](url)` para imagem; arquivos
 locais (`/media/...`) são
 enviados para `NotAI/_media` e o link do Drive entra no lugar da url local (acima de 20 MB, ou se o
@@ -302,7 +301,7 @@ arquivo sumiu, a url local fica).
 Depois de cada escrita na API o app espera 20 s (o autosave faz rajadas) e envia só o que mudou —
 a comparação é um sha256 do markdown já gravado em `drive_files`. O painel mostra o último envio, o
 resumo, o erro mais recente, um botão **Sincronizar agora** e o liga/desliga do envio automático
-(também por usuário). Renomear caderno ou nota renomeia pasta/arquivo **mantendo o mesmo id** no Drive.
+(também por usuário). Renomear a nota renomeia o arquivo, **mantendo o mesmo id** no Drive.
 
 Para conectar (uma vez, ~2 min): criar um projeto no
 [Google Cloud Console](https://console.cloud.google.com/), ativar a **Google Drive API**, criar a
@@ -323,38 +322,38 @@ permissões está em [Dados](#dados).
 ```
 users ──< sessions
   │
-  └──< notebook_members >── notebooks ──< notes ──< blocks
-        (papel: owner|editor|viewer)  │        │         │
-                                      │        │         └──< block_links >── notes   (menção `[[…]]`)
-                                      │        └──< note_relations >── notes          (N:N, com rótulo)
-                                      └──< notebook_tags >── tags ──< note_tags >──┘
+  └──< note_members >── notes ──< blocks ──< block_links >── notes   (menção `[[…]]`)
+        │               │
+        │               ├──< note_relations >── notes   (N:N, com rótulo)
+        │               └──< note_tags >── tags         (a tag aplicada à nota)
+        └── (papel: owner|editor|viewer)
 users ──< media_files        (dono de cada arquivo enviado)
-users ──< group_members >── groups ──< notebook_groups >── notebooks   (o grupo é o público do compartilhamento)
+users ──< group_members >── groups ──< note_groups >── notes   (o grupo é o público do compartilhamento)
 users ──< drive_state        (chave/valor do export, uma linha por usuário)
-users ──< events             (o feed do sino: quem fez, o quê, em quê, e em qual caderno)
+users ──< events             (o feed da Atividade: quem fez, o quê, em quê, e em qual nota)
 ```
 
-**Quem alcança o caderno é o que decide o resto** — notas, blocos, tags, vínculos e mídia pendem dele.
-A lista vem de três lugares: a linha `owner` do dono (criada junto com o caderno), os membros diretos
-em `notebook_members` e os **grupos** com que o dono compartilhou (`notebook_groups` + os membros do
-grupo em `group_members`) — quem entrar no grupo depois alcança o caderno sozinho. O papel efetivo é
+**Quem alcança a nota é o que decide o resto** — blocos, tags, vínculos e mídia pendem dela.
+A lista vem de três lugares: a linha `owner` do dono (criada junto com a nota), os membros diretos
+em `note_members` e os **grupos** com que o dono compartilhou (`note_groups` + os membros do
+grupo em `group_members`) — quem entrar no grupo depois alcança a nota sozinho. O papel efetivo é
 o **maior** entre a linha direta e o que os grupos concedem, e `acl.py` é o único lugar que responde
 isso, com a matriz: `viewer` lê; `editor` escreve conteúdo; `owner` renomeia, apaga e compartilha.
-Toda consulta passa por `acl.readable_notebook_ids` (a foto do usuário cobre vínculo direto e grupo) e
+Toda consulta passa por `acl.readable_note_ids` (a foto do usuário cobre vínculo direto e grupo) e
 todo id que chega pela URL passa por um loader que confere o papel e responde `404` quando não é de
-quem pediu. As rotas de compartilhar (`GET /api/groups`, `GET /api/notebooks/{id}/members`,
-`POST/DELETE /api/notebooks/{id}/groups/{group_id}`) e o CRUD de grupos do admin são o que a tela usa:
-**Compartilhar**, no cabeçalho do caderno, mostra quem alcança (com o papel e o grupo de cada um) e —
+quem pediu. As rotas de compartilhar (`GET /api/groups`, `GET /api/notes/{id}/members`,
+`POST/DELETE /api/notes/{id}/groups/{group_id}`) e o CRUD de grupos do admin são o que a tela usa:
+**Compartilhar**, no cabeçalho da nota, mostra quem alcança (com o papel e o grupo de cada um) e —
 para o dono — escolhe o grupo e o papel; a aba **Grupos** do admin monta os grupos. O compartilhamento
-de **saída** não está na foto: ela carrega `notebook_groups` pelos grupos de quem pede, e o dono
-normalmente não está no grupo com quem compartilhou — quem responde "com quem este caderno está
-compartilhado?" é `acl.share_audience`, uma consulta em lote por caderno do dono, e é o que alimenta o
+de **saída** não está na foto: ela carrega `note_groups` pelos grupos de quem pede, e o dono
+normalmente não está no grupo com quem compartilhou — quem responde "com quem esta nota está
+compartilhada?" é `acl.share_audience`, uma consulta em lote pelas notas do dono, e é o que alimenta o
 chip **Compartilhado com «grupos» · «N pessoas»** da lista.
 
 `users` guarda e-mail (único, minúsculo), nome, `role` (`admin` ou `user`), `is_active` e o hash da
 senha — nunca a senha. `sessions` guarda o `sha256` do token do cookie, o dono e a validade; apagar a
 linha desloga na hora. `media_files` diz de quem é cada arquivo do bucket `media`, e é o que permite
-`/media/<arquivo>` servir o dono e quem alcança o caderno que cita o arquivo. `tags` são de cada
+`/media/<arquivo>` servir o dono e quem alcança a nota que cita o arquivo. `tags` são de cada
 usuário (`owner_id` + nome único por dono): a mesma palavra em duas contas são duas linhas, e
 renomear/apagar a de um não toca na do outro.
 
@@ -362,27 +361,27 @@ Cada bloco tem `type` e os campos `text`, `language`, `url`, `caption`; só os r
 são usados, o que mantém a troca de tipo (Alt+Espaço) sem perda de conteúdo. Em `blocks`, `created_by`
 guarda quem escreveu aquele bloco — é o que a nota compartilhada mostra em cada bloco que **não é
 seu** ("Isis"), e o que fica vazio nos blocos da própria conta. Nas linhas gravadas antes desta
-coluna o nome que aparece é o do dono do caderno, que era quem escrevia.
+coluna o nome que aparece é o do dono da nota, que era quem escrevia.
 
-`note_relations` guarda uma linha por par (a direção só registra quem declarou, como o antigo vínculo
-de caderno) e `block_links` uma linha por menção resolvida — as duas caem junto com a nota
-(`ON DELETE CASCADE`). A afinidade de caderno e as contagens são calculadas a partir delas: não há
-tabela de vínculo entre cadernos. Relação e menção nunca atravessam contas: a escrita valida as duas
-pontas e a resolução do `[[título]]` só olha as notas de quem escreveu.
+`note_relations` guarda uma linha por par (a direção só registra quem declarou) e `block_links` uma
+linha por menção resolvida — as duas caem junto com a nota (`ON DELETE CASCADE`). As contagens de
+vínculo e as buscas são calculadas a partir delas: o vínculo é sempre entre notas. Relação e menção
+nunca atravessam contas: a escrita valida as duas pontas e a resolução do `[[título]]` só olha as
+notas de quem escreveu.
 
 `events` é o histórico do que aconteceu: `user_id` (quem agiu), `action` (`created`, `updated`,
 `deleted`, `tagged`, `untagged`, `linked`, `unlinked`, `shared`, `unshared`, `uploaded`, `reset`),
-`entity` (`notebook`, `note`, `block`, `tag`, `relation`, `media`, `user`, `group`, `share`), `target`
+`entity` (`note`, `block`, `tag`, `relation`, `media`, `user`, `group`, `share`), `target`
 (o rótulo do alvo, guardado no momento da ação — sobrevive ao alvo ser apagado), `detail` (o segundo
-rótulo das ações de duas partes, como o nome da tag), `notebook_id` (onde a ação aconteceu — é o que
-leva a linha aos membros do caderno compartilhado) e `created_at`. A linha entra no mesmo commit da
+rótulo das ações de duas partes, como o nome da tag), `note_id` (onde a ação aconteceu — é o que
+leva a linha aos membros da nota compartilhada) e `created_at`. A linha entra no mesmo commit da
 ação: se a ação falha, não sobra histórico. Quem pode ler é decidido no servidor: o admin lê tudo, as
-outras contas leem as próprias linhas e as do caderno em que participam, e `users.activity_seen_at`
+outras contas leem as próprias linhas e as da nota em que participam, e `users.activity_seen_at`
 guarda até quando aquela conta já viu — é o que alimenta o contador de não lidas.
 
 O backup usa duas tabelas à parte: `drive_files` (uma linha por nota **e por conta** — o rowId é
-`<user_id>_<note_id>`, porque um caderno compartilhado tem um espelho por membro: id do arquivo e da
-pasta no Drive, caminho `Caderno/Nota.md`, sha256 do markdown enviado) e `drive_state` (chave/valor,
+`<user_id>_<note_id>`, porque uma nota compartilhada tem um espelho por conta: id do arquivo no
+Drive, o caminho `<Nota>.md`, sha256 do markdown enviado) e `drive_state` (chave/valor,
 por usuário, com os ids de pasta, os links de mídia, o resumo do último envio e o `auto_sync`).
 Nenhuma das duas guarda conteúdo de nota.
 
@@ -397,33 +396,30 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `POST` | `/api/auth/login` · `/logout` · `/password` | entra (cookie de 30 dias) / sai / troca a própria senha |
 | `GET` | `/api/auth/me` | quem está logado; `401` se a sessão acabou |
 | `POST` | `/api/auth/welcome` | marca a introdução do primeiro login como lida (a marca é da conta, e a linha volta) |
-| `GET` | `/api/events?limit=` | o feed do sino: as últimas interações visíveis para quem pediu, com `unread` |
+| `GET` | `/api/events?limit=` | o feed da Atividade: as últimas interações visíveis para quem pediu, com `unread` |
 | `POST` | `/api/events/read` | marca tudo até agora como visto (é o que zera o contador) |
-| `GET/POST` | `/api/admin/users` | lista as contas com cadernos, notas, blocos e mídia / cria (`409` se o e-mail existe) |
+| `GET/POST` | `/api/admin/users` | lista as contas com notas, blocos e mídia / cria (`409` se o e-mail existe) |
 | `PATCH/DELETE` | `/api/admin/users/{id}` | nome, papel e ativação / exclui a conta com tudo o que é dela |
 | `POST` | `/api/admin/users/{id}/password` | redefine a senha e derruba as sessões daquela conta |
 | `GET/POST` | `/api/admin/groups` | lista os grupos (nome e tamanho) / cria — quem compõe o grupo é o admin |
-| `GET/PATCH/DELETE` | `/api/admin/groups/{id}` | os ids de quem está no grupo / renomeia / apaga (leva junto os vínculos com cadernos) |
+| `GET/PATCH/DELETE` | `/api/admin/groups/{id}` | os ids de quem está no grupo / renomeia / apaga (leva junto os vínculos com as notas) |
 | `PUT/DELETE` | `/api/admin/groups/{id}/members/{user_id}` | põe/tira alguém do grupo (idempotente) |
-| `GET/POST` | `/api/notebooks` | lista com contagens por tipo de bloco — cada item diz o papel de quem pediu, o dono e, nos cadernos dele, com que grupos o caderno está compartilhado / cria (já com uma nota vazia) |
-| `GET/PATCH/DELETE` | `/api/notebooks/{id}` | detalhe (notas, tags, afinidade derivada), renomear, apagar |
-| `POST/DELETE` | `/api/notebooks/{id}/tags/{tag_id}` | aplica/remove tag do caderno |
-| `GET` | `/api/groups` | os grupos de que a conta participa, para escolher com quem compartilhar |
-| `GET` | `/api/notebooks/{id}/members` | quem alcança o caderno — direto e por grupo — com o papel de cada um, e com quais grupos ele está compartilhado |
-| `POST/DELETE` | `/api/notebooks/{id}/groups/{group_id}` | compartilha com o grupo (`{"role": "editor"\|"viewer"}`, padrão `editor`) / deixa de compartilhar — só o dono |
-| `GET` | `/api/relations` | todas as arestas entre notas, declaradas e menções (usado pelo grafo) |
-| `GET/POST` | `/api/notebooks/{id}/notes` | lista/cria notas (`{"title": "...", "text": "..."}`; o `text`, quando vem, vira o primeiro bloco) |
-| `GET` | `/api/notes` | todas as notas (resumo com caderno, trecho e contagens), da mais recente para a mais antiga; `?q=` filtra por título |
-| `GET/PATCH/DELETE` | `/api/notes/{id}` | nota com blocos e relações, renomear, apagar |
+| `GET/POST` | `/api/notes` | as notas que a conta alcança, da mais recente para a mais antiga, com o papel de quem pediu, o dono, as tags, o trecho e as contagens por tipo (`?q=` filtra por título e `limit` corta) / cria com o primeiro bloco (`{"title", "text"}`) e já deixa o dono como `owner` |
+| `GET/PATCH/DELETE` | `/api/notes/{id}` | a nota com blocos e relações / renomeia (e a `position`) — só o dono / apaga — só o dono, levando blocos, vínculos, tags, o compartilhamento e o espelho do Drive daquela conta |
 | `GET` | `/api/notes/{id}/related` | relações, menções de saída e backlinks da nota |
-| `POST/DELETE` | `/api/notes/{id}/relations[/{id}]` | cria (idempotente, com rótulo) / remove relação entre notas |
-| `POST/DELETE` | `/api/notes/{id}/tags/{tag_id}` | aplica/remove tag da nota (a tag nova também entra no caderno) |
+| `POST/DELETE` | `/api/notes/{id}/relations[/{relation_id}]` | cria (idempotente, com rótulo) / remove relação entre notas |
+| `POST/DELETE` | `/api/notes/{id}/tags/{tag_id}` | aplica/remove tag da nota |
+| `GET` | `/api/notes/{id}/members` | o painel de compartilhar: quem alcança a nota (o dono, os membros diretos e quem veio por grupo, com o papel e o grupo de cada um), os grupos com que ela está compartilhada — e o papel de cada um — e os grupos que ainda podem ser adicionados |
+| `POST/DELETE` | `/api/notes/{id}/groups/{group_id}` | compartilha com o grupo (`{"role": "editor"\|"viewer"}`, padrão `editor`) / desfaz — só o dono |
+| `GET` | `/api/groups` | os grupos de que a conta participa, para escolher com quem compartilhar |
+| `GET` | `/api/relations` | todas as arestas entre notas, declaradas e menções (usado pelo grafo) |
 | `POST` | `/api/notes/{id}/blocks` | cria bloco |
 | `POST` | `/api/notes/{id}/blocks/reorder` | reordena (`{"block_ids": [...]}` com todos os blocos da nota) |
-| `PATCH/DELETE` | `/api/blocks/{id}` | edita/apaga bloco |
+| `GET` | `/api/blocks?type=&limit=` | todos os blocos de um tipo, em todas as notas ao alcance da conta, mais novos primeiro (é a lista por tipo) |
+| `PATCH/DELETE` | `/api/blocks/{id}` | edita/apaga bloco (o bloco de outra conta responde `403`) |
 | `GET/POST/PATCH/DELETE` | `/api/tags` | as tags de quem pediu, com contagem de uso; `POST` é idempotente por nome dentro da conta |
 | `POST` | `/api/media` | upload (imagem/vídeo/pdf, até 30 MB) → `{"url": "/media/..."}`; o arquivo fica com o dono. `415` para tipo/extensão recusada e `503` quando o Storage do Appwrite não responde |
-| `GET` | `/media/{arquivo}` | serve o arquivo só para o dono; qualquer outro recebe `404`. PDF sai `inline` (o modal o emoldura e o navegador desenha); o resto, `attachment` |
+| `GET` | `/media/{arquivo}` | serve o arquivo para o dono e para quem alcança uma nota que o cita; qualquer outro recebe `404`. PDF sai `inline` (o modal o emoldura e o navegador desenha); o resto, `attachment` |
 | `GET` | `/api/search?q=` · `/api/stats` | busca e totais apenas do que é daquela conta |
 | `GET` | `/api/drive/status` | conexão, `auto_sync`, envio pendente, resumo e erro do último envio |
 | `POST` | `/api/drive/client-file` | recebe o JSON do cliente OAuth (multipart `file`) |

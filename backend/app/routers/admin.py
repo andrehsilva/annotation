@@ -25,7 +25,7 @@ from ..schemas import (
     UserUpdateIn,
 )
 from ..security import hash_password
-from ..store import BUCKET_ID, Conflict, Store, documents, equal, order_asc
+from ..store import BUCKET_ID, Conflict, IN_VALUES, Store, documents, equal, order_asc
 from ..store.documents import Row
 from ..values import utcnow
 
@@ -44,7 +44,6 @@ def _summary(db: Store, user: Row) -> AdminUserOut:
     photo = _photo(db, user.id)
     return AdminUserOut(
         **UserOut.model_validate(user).model_dump(),
-        notebooks=len(photo["notebook_members"]),
         notes=len(photo["notes"]),
         blocks=len(photo["blocks"]),
         media_bytes=sum(int(row["size"] or 0) for row in photo["media_files"]),
@@ -149,7 +148,7 @@ def delete_group(
     with db.transaction() as tx:
         db.stage(tx, [events.operation(admin.id, "deleted", "group", group.name)])
     db.delete_where("group_members", [equal("group_id", str(group_id))])
-    db.delete_where("notebook_groups", [equal("group_id", str(group_id))])
+    db.delete_where("note_groups", [equal("group_id", str(group_id))])
     documents.remove("groups", group_id)
     for user_id in members:
         db.invalidate(user_id)
@@ -304,33 +303,33 @@ def _remove_media(db: Store, user_id: int, filename: str) -> None:
     documents.remove("media_files", filename, owner_id=user_id)
 
 
-def _notebooks_to_purge(
+def _notes_to_purge(
     db: Store, user_id: int, photo: dict[str, list[Any]]
 ) -> tuple[set[int], set[int]]:
-    """Cadernos que ficam sem ninguém; no compartilhado a conta apenas sai, sem levar o trabalho.
+    """Notas que ficam sem ninguém; na compartilhada a conta apenas sai, sem levar o trabalho.
 
     Devolve também os ids dos outros membros encontrados: a foto deles muda (a conta sai da lista e
     o papel pode mudar de mão), e `delete_where`/`update` crus não invalidam o cache por usuário.
     """
-    candidates = {row.notebook_id for row in photo["notebook_members"]} | {
-        row.id for row in photo["notebooks"]
+    candidates = {row.note_id for row in photo["note_members"]} | {
+        row.id for row in photo["notes"]
     }
     doomed: set[int] = set()
     affected: set[int] = set()
-    for notebook_id in sorted(candidates):
+    for note_id in sorted(candidates):
         others = [
             row
-            for row in db.page("notebook_members", [equal("notebook_id", str(notebook_id))])
+            for row in db.page("note_members", [equal("note_id", str(note_id))])
             if documents.to_int(row["user_id"]) != user_id
         ]
         if not others:
-            doomed.add(notebook_id)
+            doomed.add(note_id)
             continue
         affected.update(documents.to_int(row["user_id"]) for row in others)
         if not any(row.get("role") == "owner" for row in others):
-            # O caderno fica sem dono: o membro mais antigo herda o papel.
+            # A nota fica sem dono: o membro mais antigo herda o papel.
             heir = min(others, key=lambda row: documents.to_int(row["user_id"]))
-            db.update("notebook_members", heir["$id"], {"role": "owner"})
+            db.update("note_members", heir["$id"], {"role": "owner"})
     return doomed, affected
 
 
@@ -339,25 +338,31 @@ def purge_user(db: Store, user_id: int) -> None:
 
     Ordem, e por quê:
 
-    1. caderno compartilhado: repassa o `owner` ao membro mais antigo e tira as participações da
-       conta (antes de qualquer nota, porque é a lista de membros que decide o que sobra);
+    1. nota compartilhada: repassa o `owner` ao membro mais antigo e tira as participações da conta
+       (antes de qualquer bloco, porque é a lista de membros que decide o que sobra);
     2. arquivos do bucket e suas linhas em `media_files`;
     3. menções (`block_links`, por nota citada e por bloco citante) — apontam para notas e blocos;
     4. vínculos (`note_relations`, por origem e por destino);
-    5. `note_tags`/`notebook_tags` por nota, por caderno e por tag (uma linha sobrevivente apontando
-       para uma tag apagada seria órfã);
+    5. `note_tags` por nota e por tag (uma linha sobrevivente apontando para uma tag apagada seria
+       órfã);
     6. blocos, depois notas (e o espelho de `drive_files` de cada nota, por conta);
-    7. cadernos, depois as tags do dono;
+    7. as tags do dono;
     8. eventos, sessões e `drive_state` da conta, e os arquivos de token em disco.
 
     Idempotente: cada passo tolera o que já não existe (delete de ausente é `False`, `delete_where`
     devolve 0), então repetir a chamada termina igual.
     """
     photo = _photo(db, user_id)
-    doomed, affected = _notebooks_to_purge(db, user_id, photo)
-    db.delete_where("notebook_members", [equal("user_id", str(user_id))])
+    doomed, affected = _notes_to_purge(db, user_id, photo)
+    db.delete_where("note_members", [equal("user_id", str(user_id))])
+    # As linhas de grupo das notas que ficam órfãs: `equal` com muitos valores vira um OR gigante, e
+    # o servidor recusa acima de 100 (mesmo teto das outras consultas por lista).
+    doomed_ids = [str(note_id) for note_id in sorted(doomed)]
+    for start in range(0, len(doomed_ids), IN_VALUES):
+        chunk = doomed_ids[start : start + IN_VALUES]
+        db.delete_where("note_groups", [equal("note_id", *chunk)])
 
-    note_ids = sorted(row.id for row in photo["notes"] if row.notebook_id in doomed)
+    note_ids = sorted(row.id for row in photo["notes"] if row.id in doomed)
     block_ids = sorted(row.id for row in photo["blocks"] if row.note_id in note_ids)
     tag_ids = sorted(row.id for row in photo["tags"])
 
@@ -371,11 +376,8 @@ def purge_user(db: Store, user_id: int) -> None:
         db.delete_where("note_tags", [equal("note_id", str(note_id))])
     for block_id in block_ids:
         db.delete_where("block_links", [equal("block_id", str(block_id))])
-    for notebook_id in sorted(doomed):
-        db.delete_where("notebook_tags", [equal("notebook_id", str(notebook_id))])
     for tag_id in tag_ids:
         db.delete_where("note_tags", [equal("tag_id", str(tag_id))])
-        db.delete_where("notebook_tags", [equal("tag_id", str(tag_id))])
 
     for block_id in block_ids:
         documents.remove("blocks", block_id, owner_id=user_id)
@@ -384,8 +386,6 @@ def purge_user(db: Store, user_id: int) -> None:
         # O espelho é por conta: sai só o de quem está indo embora (o do colega que fica continua
         # valendo, senão o Drive dele ganharia cópia repetida).
         db.delete("drive_files", documents.drive_file_id(user_id, note_id))
-    for notebook_id in sorted(doomed):
-        documents.remove("notebooks", notebook_id, owner_id=user_id)
     for tag_id in tag_ids:
         documents.remove("tags", tag_id, owner_id=user_id)
 
@@ -394,7 +394,7 @@ def purge_user(db: Store, user_id: int) -> None:
     db.delete_where("drive_state", [equal("user_id", str(user_id))])
     drive.forget_files(user_id)
     # A foto de quem ficou mudou (o membro saiu, o papel trocou de mão) e nenhuma das escritas
-    # acima é do tipo que invalida sozinha: o TTL curto não pode devolver o caderno antigo.
+    # acima é do tipo que invalida sozinha: o TTL curto não pode devolver a nota antiga.
     for other_id in sorted(affected):
         db.invalidate(other_id)
 

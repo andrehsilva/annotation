@@ -3,27 +3,27 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import { SHARE_ROLE_LABELS } from "../lib/format";
-import type { Notebook, NotebookSharing } from "../lib/types";
+import type { Note, NoteSharing } from "../lib/types";
 import type { ToastKind } from "./ToastStack";
 
 interface ShareModalProps {
-  notebook: Notebook;
+  note: Note;
   onClose: () => void;
-  /** Compartilhar ou tirar o grupo muda o que o caderno diz na lista: o App recarrega os dois. */
+  /** Compartilhar ou tirar o grupo muda o que a nota diz na lista: o App recarrega as duas. */
   onChanged: () => void;
   onError: (error: unknown) => void;
   onNotify: (message: string, kind?: ToastKind) => void;
 }
 
 /**
- * O painel de compartilhar do caderno.
+ * O painel de compartilhar da nota.
  *
  * Quem alcança vem de duas fontes: os grupos com que o dono compartilhou (o caso normal) e
  * eventuais membros diretos. Só o dono mexe nisso — para os outros a mesma lista é só leitura, o
  * que já responde "quem mais está vendo isto?".
  */
-export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: ShareModalProps) {
-  const [sharing, setSharing] = useState<NotebookSharing | null>(null);
+export function ShareModal({ note, onClose, onChanged, onError, onNotify }: ShareModalProps) {
+  const [sharing, setSharing] = useState<NoteSharing | null>(null);
   const [busy, setBusy] = useState(false);
   const [groupId, setGroupId] = useState<number | null>(null);
   const [role, setRole] = useState<"editor" | "viewer">("editor");
@@ -42,7 +42,7 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
   useEffect(() => {
     let cancelled = false;
     void api
-      .notebookSharing(notebook.id)
+      .noteSharing(note.id)
       .then((next) => {
         if (!cancelled) setSharing(next);
       })
@@ -52,10 +52,10 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
     return () => {
       cancelled = true;
     };
-  }, [notebook.id, onError]);
+  }, [note.id, onError]);
 
   const apply = useCallback(
-    (action: () => Promise<NotebookSharing>, message: string) => {
+    (action: () => Promise<NoteSharing>, message: string) => {
       setBusy(true);
       void action()
         .then((next) => {
@@ -80,10 +80,10 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="sheet" role="dialog" aria-modal="true" aria-label="Compartilhar o caderno">
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Compartilhar a nota">
         <div className="sheet-head">
           <p className="confirm-title">
-            <UsersThree size={16} weight="bold" /> Compartilhar “{notebook.title}”
+            <UsersThree size={16} weight="bold" /> Compartilhar “{note.title}”
           </p>
           <button type="button" className="icon-btn is-tiny" onClick={onClose} aria-label="Fechar">
             <X size={14} weight="bold" />
@@ -91,14 +91,14 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
         </div>
 
         {sharing === null ? (
-          <p className="panel-hint">Carregando quem alcança este caderno...</p>
+          <p className="panel-hint">Carregando quem alcança esta nota...</p>
         ) : (
           <>
             <p className="panel-hint">
               {sharing.can_share
-                ? "O caderno é compartilhado com grupos: quem está no grupo alcança estas notas, e quem entrar depois também. Os grupos são montados pelo admin."
-                : `Quem mais alcança este caderno. Só o dono${
-                    notebook.owner_name ? ` (${notebook.owner_name})` : ""
+                ? "A nota é compartilhada com grupos: quem está no grupo a alcança, e quem entrar depois também. Os grupos são montados pelo admin."
+                : `Quem mais alcança esta nota. Só o dono${
+                    note.owner_name ? ` (${note.owner_name})` : ""
                   } compartilha ou desfaz.`}
             </p>
 
@@ -134,7 +134,7 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
                   <p className="panel-hint">
                     {sharing.available.length === 0
                       ? "Nenhum grupo existe ainda — crie um na aba Grupos, em Admin."
-                      : "Todos os grupos já alcançam este caderno."}
+                      : "Todos os grupos já alcançam esta nota."}
                   </p>
                 ) : (
                   <div className="share-form">
@@ -169,7 +169,7 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
                       onClick={() =>
                         picked !== null &&
                         apply(
-                          () => api.shareNotebook(notebook.id, picked, role),
+                          () => api.shareNote(note.id, picked, role),
                           "Caderno compartilhado com o grupo",
                         )
                       }
@@ -201,8 +201,8 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
                             onChange={(event) =>
                               apply(
                                 () =>
-                                  api.shareNotebook(
-                                    notebook.id,
+                                  api.shareNote(
+                                    note.id,
                                     entry.group_id,
                                     event.target.value as "editor" | "viewer",
                                   ),
@@ -221,8 +221,8 @@ export function ShareModal({ notebook, onClose, onChanged, onError, onNotify }: 
                             disabled={busy}
                             onClick={() =>
                               apply(
-                                () => api.unshareNotebook(notebook.id, entry.group_id),
-                                `“${entry.name}” não alcança mais este caderno`,
+                                () => api.unshareNote(note.id, entry.group_id),
+                                `“${entry.name}” não alcança mais esta nota`,
                               )
                             }
                           >

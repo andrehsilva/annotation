@@ -13,7 +13,7 @@ interface GraphCanvasProps {
   notes: NoteSummary[];
   edges: RelationEdge[];
   activeId: number | null;
-  onSelect: (noteId: number, notebookId: number) => void;
+  onSelect: (noteId: number) => void;
 }
 
 /** Notes that take part in some link, laid out in a fixed circle: no physics, stable picture. */
@@ -32,8 +32,12 @@ export function GraphCanvas({ notes, edges, activeId, onSelect }: GraphCanvasPro
     );
   }
 
-  const notebookIds = [...new Set(nodes.map((note) => note.notebook_id))].sort((a, b) => a - b);
-  const colorOf = (notebookId: number) => COLORS[notebookIds.indexOf(notebookId) % COLORS.length];
+  // A cor agrupa pela primeira tag da nota — era o caderno que agrupava, e o caderno não existe
+  // mais. Nota sem tag fica na cor neutra, e a legenda lista as tags que aparecem no grafo.
+  const tagOf = (note: NoteSummary) => note.tags[0]?.name ?? "";
+  const legend = [...new Set(nodes.map(tagOf))].sort((a, b) => a.localeCompare(b));
+  const colorOf = (note: NoteSummary) =>
+    tagOf(note) ? COLORS[legend.indexOf(tagOf(note)) % COLORS.length] : "var(--text-muted)";
   const placed = new Map(
     nodes.map((note, index) => {
       const angle = (index / nodes.length) * Math.PI * 2 - Math.PI / 2;
@@ -87,14 +91,14 @@ export function GraphCanvas({ notes, edges, activeId, onSelect }: GraphCanvasPro
             key={note.id}
             className={note.id === activeId ? "graph-node is-active" : "graph-node"}
             transform={`translate(${x} ${y})`}
-            onClick={() => onSelect(note.id, note.notebook_id)}
+            onClick={() => onSelect(note.id)}
             role="button"
             tabIndex={0}
             onKeyDown={(event) => {
-              if (event.key === "Enter") onSelect(note.id, note.notebook_id);
+              if (event.key === "Enter") onSelect(note.id);
             }}
           >
-            <circle r={11} style={{ fill: colorOf(note.notebook_id) }} />
+            <circle r={11} style={{ fill: colorOf(note) }} />
             <text className="graph-node-title" textAnchor="middle" y={28}>
               {note.title.length > 26 ? `${note.title.slice(0, 26)}…` : note.title}
             </text>
@@ -103,15 +107,15 @@ export function GraphCanvas({ notes, edges, activeId, onSelect }: GraphCanvasPro
       </svg>
 
       <p className="panel-hint graph-legend">
-        {notebookIds.map((notebookId) => {
-          const note = nodes.find((item) => item.notebook_id === notebookId);
-          return (
-            <span className="graph-legend-item" key={notebookId}>
-              <span className="graph-swatch" style={{ background: colorOf(notebookId) }} />
-              {note?.notebook_title}
-            </span>
-          );
-        })}
+        {legend.map((tag) => (
+          <span className="graph-legend-item" key={tag || "sem-tag"}>
+            <span
+              className="graph-swatch"
+              style={{ background: tag ? COLORS[legend.indexOf(tag) % COLORS.length] : "var(--text-muted)" }}
+            />
+            {tag || "sem tag"}
+          </span>
+        ))}
         <span className="graph-legend-item">— relação</span>
         <span className="graph-legend-item">┄ menção</span>
       </p>

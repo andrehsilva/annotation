@@ -1,4 +1,9 @@
-"""Copia o SQLite do NotAI para o Appwrite preservando os ids que já existem.
+"""Migração do SQLite **do modelo antigo** (com cadernos) para o Appwrite.
+
+O app de hoje não tem caderno: a nota é a unidade, e as tabelas `notebooks`, `notebook_members`,
+`notebook_tags` e `notebook_groups` não existem mais. Este script ficou como registro da migração que
+já aconteceu — ele só faz sentido contra o SQLite de antes da mudança de modelo.
+Copia o SQLite do NotAI para o Appwrite preservando os ids que já existem.
 
     python tools/migrate_sqlite.py --dry-run                 # só lê o SQLite e relata as contagens
     python tools/migrate_sqlite.py --apply                   # copia tudo (idempotente)

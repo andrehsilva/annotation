@@ -7,7 +7,6 @@ export interface Tag {
 }
 
 export interface TagUsage extends Tag {
-  notebooks_count: number;
   notes_count: number;
 }
 
@@ -20,7 +19,7 @@ export interface Block {
   language: string;
   url: string;
   caption: string;
-  /** Quem escreveu, quando não é você (caderno compartilhado); vazio nos seus blocos. */
+  /** Quem escreveu, quando não é você (nota compartilhada); vazio nos seus blocos. */
   author: string;
   created_at: string;
   updated_at: string;
@@ -37,16 +36,13 @@ export interface BlockListItem {
   updated_at: string;
   note_id: number;
   note_title: string;
-  notebook_id: number;
-  notebook_title: string;
 }
 
 export type BlockCounts = Record<BlockType, number>;
 
+/** Uma nota na lista: é a unidade do app — tem dono, papel e compartilhamento próprios. */
 export interface NoteSummary {
   id: number;
-  notebook_id: number;
-  notebook_title: string;
   title: string;
   position: number;
   created_at: string;
@@ -54,14 +50,30 @@ export interface NoteSummary {
   tags: Tag[];
   counts: BlockCounts;
   excerpt: string;
+  /** Quantos vínculos (declarados ou citações) tocam esta nota. */
+  relations_count: number;
+  /** O papel de quem pediu: a nota pode ser de outra conta, alcançada por grupo. */
+  role: ShareRole;
+  owner_id: number;
+  owner_name: string;
+  /** `role !== "owner"`: a nota é de outra conta e chegou aqui por grupo. */
+  shared: boolean;
+  /** O outro lado: os grupos com que **esta** nota saiu daqui — vazio quando não é minha. */
+  shared_groups: string[];
+  /** Quantas contas esses grupos levam até a nota, fora eu (o dono já está aqui). */
+  shared_people: number;
 }
 
-/** A note seen from another one: enough to label it, open it and place it in its notebook. */
+/** A nota com os blocos e os vínculos, como o editor a recebe. */
+export interface Note extends NoteSummary {
+  blocks: Block[];
+  relations: NoteRelation[];
+}
+
+/** A note seen from another one: enough to label it and open it. */
 export interface RelatableNote {
   id: number;
   title: string;
-  notebook_id: number;
-  notebook_title: string;
 }
 
 export interface NoteRelation {
@@ -84,13 +96,6 @@ export interface NoteRelated {
   backlinks: Backlink[];
 }
 
-/** A notebook reached through its notes, with how many note links cross over. */
-export interface NotebookAffinity {
-  notebook_id: number;
-  title: string;
-  links_count: number;
-}
-
 export interface RelationEdge {
   key: string;
   kind: "relation" | "mention";
@@ -100,65 +105,11 @@ export interface RelationEdge {
   target_id: number;
   source_title: string;
   target_title: string;
-  source_notebook_id: number;
-  target_notebook_id: number;
-}
-
-export interface Note {
-  id: number;
-  notebook_id: number;
-  title: string;
-  position: number;
-  created_at: string;
-  updated_at: string;
-  tags: Tag[];
-  blocks: Block[];
-  relations: NoteRelation[];
-}
-
-export interface Tag {
-  id: number;
-  name: string;
-  color: string;
-}
-
-export interface TagUsage extends Tag {
-  notebooks_count: number;
-  notes_count: number;
-}
-
-export interface NotebookSummary {
-  id: number;
-  title: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  tags: Tag[];
-  notes_count: number;
-  counts: BlockCounts;
-  /** How many other notebooks this one reaches through its notes. */
-  relations_count: number;
-  /** O papel de quem pediu: o caderno pode ser de outra conta, alcançado por grupo. */
-  role: ShareRole;
-  owner_id: number;
-  owner_name: string;
-  /** `role !== "owner"`: o caderno é de outra conta e chegou aqui por grupo. */
-  shared: boolean;
-  /** O outro lado: os grupos com que **este** caderno saiu daqui — vazio quando não é meu. */
-  shared_groups: string[];
-  /** Quantas contas esses grupos levam até o caderno, fora eu (o dono já está aqui). */
-  shared_people: number;
-}
-
-export interface Notebook extends NotebookSummary {
-  notes: NoteSummary[];
-  affinity: NotebookAffinity[];
 }
 
 export interface SearchHit {
-  kind: "notebook" | "note" | "block" | "tag";
+  kind: "note" | "block" | "tag";
   id: number;
-  notebook_id: number | null;
   note_id: number | null;
   title: string;
   snippet: string;
@@ -170,7 +121,6 @@ export interface SearchResults {
 }
 
 export interface Stats {
-  notebooks: number;
   notes: number;
   blocks: number;
   tags: number;
@@ -212,7 +162,7 @@ export interface DriveStatus {
 
 export type Role = "admin" | "user";
 
-/** Papel de uma conta dentro de um caderno: quem só lê, quem escreve, e o dono. */
+/** Papel de uma conta dentro de uma nota: quem só lê, quem escreve, e o dono. */
 export type ShareRole = "owner" | "editor" | "viewer";
 
 /** Grupo de contas — o público do compartilhamento, criado e mantido pelo admin. */
@@ -227,8 +177,8 @@ export interface GroupDetail extends Group {
   member_ids: number[];
 }
 
-/** Quem alcança um caderno, com o papel efetivo e os grupos que o trouxeram. */
-export interface NotebookMember {
+/** Quem alcança a nota, com o papel efetivo e os grupos que o trouxeram. */
+export interface NoteMember {
   user_id: number;
   display_name: string;
   email: string;
@@ -237,8 +187,8 @@ export interface NotebookMember {
   groups: string[];
 }
 
-/** Um grupo com que o caderno está compartilhado: o papel vale para todo mundo dele. */
-export interface NotebookGroupShare {
+/** Um grupo com que a nota está compartilhada: o papel vale para todo mundo dele. */
+export interface NoteGroupShare {
   group_id: number;
   name: string;
   role: "editor" | "viewer";
@@ -246,11 +196,11 @@ export interface NotebookGroupShare {
 }
 
 /** O painel de compartilhar: quem alcança, com quais grupos, e o que eu ainda posso escolher. */
-export interface NotebookSharing {
+export interface NoteSharing {
   role: ShareRole;
   can_share: boolean;
-  members: NotebookMember[];
-  groups: NotebookGroupShare[];
+  members: NoteMember[];
+  groups: NoteGroupShare[];
   available: Group[];
 }
 
@@ -269,7 +219,6 @@ export interface User {
 
 /** The same account seen from the admin screen: how much data it holds. */
 export interface AdminUser extends User {
-  notebooks: number;
   notes: number;
   blocks: number;
   media_bytes: number;

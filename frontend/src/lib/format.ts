@@ -1,9 +1,9 @@
-import type { Block, BlockType, NotebookSummary, ShareRole } from "./types";
+import type { Block, BlockType, NoteSummary, ShareRole } from "./types";
 
 /** Alt+Space walks this order. */
 export const KIND_ORDER: BlockType[] = ["text", "code", "url", "image", "video", "pdf"];
 
-/** O papel de uma conta dentro de um caderno, como a tela o chama. */
+/** O papel de uma conta dentro de uma nota, como a tela o chama. */
 export const SHARE_ROLE_LABELS: Record<ShareRole, string> = {
   owner: "dono",
   editor: "editor",
@@ -37,21 +37,21 @@ export function isBlank(block: Pick<Block, "text" | "url" | "caption">): boolean
 }
 
 /**
- * O bloco é de outra conta (caderno compartilhado). A API só deixa quem escreveu mudá-lo ou
+ * O bloco é de outra conta (nota compartilhada). A API só deixa quem escreveu mudá-lo ou
  * apagá-lo, então a tela desliga a edição: `author` vem preenchido apenas para bloco alheio.
  */
 export function isForeignBlock(block: Pick<Block, "author">): boolean {
   return block.author !== "";
 }
 
-/** The sidebar's filter, shared with the tag shortcut: title, description or an attached tag. */
-export function notebookMatches(notebook: NotebookSummary, needle: string): boolean {
+/** O filtro da lista, também usado pelo atalho de tag: título, trecho ou tag aplicada. */
+export function noteMatches(note: NoteSummary, needle: string): boolean {
   const term = needle.trim().toLowerCase();
   if (!term) return true;
   return (
-    notebook.title.toLowerCase().includes(term) ||
-    notebook.description.toLowerCase().includes(term) ||
-    notebook.tags.some((tag) => tag.name.toLowerCase().includes(term))
+    note.title.toLowerCase().includes(term) ||
+    note.excerpt.toLowerCase().includes(term) ||
+    note.tags.some((tag) => tag.name.toLowerCase().includes(term))
   );
 }
 

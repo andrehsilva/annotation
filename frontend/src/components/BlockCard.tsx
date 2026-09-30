@@ -111,7 +111,7 @@ export function BlockCard({
     }
   };
 
-  // Bloco de outra conta (caderno compartilhado): leitura. O backend recusa mudá-lo ou apagá-lo, e a
+  // Bloco de outra conta (nota compartilhada): leitura. O backend recusa mudá-lo ou apagá-lo, e a
   // tela não oferece o que a rota nega.
   const foreign = isForeignBlock(block);
 

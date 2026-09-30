@@ -10,11 +10,9 @@ import type {
   GroupDetail,
   MediaUpload,
   Note,
+  NoteSharing,
   NoteRelated,
   NoteSummary,
-  Notebook,
-  NotebookSharing,
-  NotebookSummary,
   RelationEdge,
   Role,
   SearchResults,
@@ -101,33 +99,17 @@ export const api = {
 
   /** Os grupos de que a conta participa: é a lista que o painel de compartilhar oferece. */
   myGroups: () => request<Group[]>("/api/groups"),
-  notebookSharing: (id: number) => request<NotebookSharing>(`/api/notebooks/${id}/members`),
-  shareNotebook: (id: number, groupId: number, role: "editor" | "viewer") =>
-    request<NotebookSharing>(`/api/notebooks/${id}/groups/${groupId}`, {
-      method: "POST",
-      ...json({ role }),
-    }),
-  unshareNotebook: (id: number, groupId: number) =>
-    request<NotebookSharing>(`/api/notebooks/${id}/groups/${groupId}`, { method: "DELETE" }),
+  noteSharing: (id: number) => request<NoteSharing>(`/api/notes/${id}/members`),
+  shareNote: (id: number, groupId: number, role: "editor" | "viewer") =>
+    request<NoteSharing>(`/api/notes/${id}/groups/${groupId}`, { method: "POST", ...json({ role }) }),
+  unshareNote: (id: number, groupId: number) =>
+    request<NoteSharing>(`/api/notes/${id}/groups/${groupId}`, { method: "DELETE" }),
 
-  listNotebooks: () => request<NotebookSummary[]>("/api/notebooks"),
-  getNotebook: (id: number) => request<Notebook>(`/api/notebooks/${id}`),
-  createNotebook: (title: string, description = "") =>
-    request<Notebook>("/api/notebooks", { method: "POST", ...json({ title, description }) }),
-  updateNotebook: (id: number, patch: { title?: string; description?: string }) =>
-    request<Notebook>(`/api/notebooks/${id}`, { method: "PATCH", ...json(patch) }),
-  deleteNotebook: (id: number) => request<void>(`/api/notebooks/${id}`, { method: "DELETE" }),
-  attachNotebookTag: (id: number, tagId: number) =>
-    request<Notebook>(`/api/notebooks/${id}/tags/${tagId}`, { method: "POST" }),
-  detachNotebookTag: (id: number, tagId: number) =>
-    request<Notebook>(`/api/notebooks/${id}/tags/${tagId}`, { method: "DELETE" }),
-
+  listNotes: (q = "", limit = 300) =>
+    request<NoteSummary[]>(`/api/notes?q=${encodeURIComponent(q)}&limit=${limit}`),
   getNote: (id: number) => request<Note>(`/api/notes/${id}`),
-  createNote: (notebookId: number, title = "", text = "") =>
-    request<Note>(`/api/notebooks/${notebookId}/notes`, {
-      method: "POST",
-      ...json({ title, text }),
-    }),
+  createNote: (title = "", text = "") =>
+    request<Note>("/api/notes", { method: "POST", ...json({ title, text }) }),
   updateNote: (id: number, patch: { title?: string; position?: number }) =>
     request<Note>(`/api/notes/${id}`, { method: "PATCH", ...json(patch) }),
   deleteNote: (id: number) => request<void>(`/api/notes/${id}`, { method: "DELETE" }),
@@ -144,8 +126,6 @@ export const api = {
     }),
   deleteRelation: (id: number, relationId: number) =>
     request<NoteRelated>(`/api/notes/${id}/relations/${relationId}`, { method: "DELETE" }),
-  listNotes: (q = "", limit = 300) =>
-    request<NoteSummary[]>(`/api/notes?q=${encodeURIComponent(q)}&limit=${limit}`),
 
   createBlock: (noteId: number, type: BlockType, position?: number) =>
     request<Block>(`/api/notes/${noteId}/blocks`, {

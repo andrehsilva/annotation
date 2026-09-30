@@ -28,7 +28,7 @@ ACTIONS: tuple[str, ...] = (
     "reset",
 )
 
-ENTITIES: tuple[str, ...] = ("notebook", "note", "block", "tag", "relation", "media", "user")
+ENTITIES: tuple[str, ...] = ("note", "block", "tag", "relation", "media", "user")
 
 
 def utcnow() -> datetime:

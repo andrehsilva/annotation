@@ -26,19 +26,15 @@ def stats(
 ) -> Stats:
     """Totais do painel: só o que é do dono, nunca o banco inteiro.
 
-    A foto do usuário já é a lista do que ele alcança (cadernos próprios + onde é membro, e as
-    notas/blocos desses cadernos), então contar é varrer essa foto — não existe `GROUP BY` aqui.
+    A foto do usuário já é a lista do que ele alcança (as notas próprias e as compartilhadas com
+    ele), então contar é varrer essa foto — não existe `GROUP BY` aqui.
     """
     photo = db.snapshot(user.id)
-    notebook_ids = {row.id for row in photo["notebooks"]} | {
-        row.notebook_id for row in photo["notebook_members"]
-    }
     note_ids = {row.id for row in photo["notes"]}
     counts = empty_counts()
     for block in photo["blocks"]:
         counts[block.type] = counts.get(block.type, 0) + 1
     return Stats(
-        notebooks=len(notebook_ids),
         notes=len(note_ids),
         blocks=len(photo["blocks"]),
         tags=len(photo["tags"]),

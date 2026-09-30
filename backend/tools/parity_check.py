@@ -8,8 +8,8 @@
 em sequência) e compara resposta por resposta. É assim que a troca do SQLite pelo Appwrite é
 conferida: as duas execuções passam pelo mesmo contrato e o diff mostra o que mudou.
 
-O roteiro cria o próprio cenário — um caderno `parity-check`, duas notas, blocos, uma tag com nome
-sorteado, um vínculo e um upload — e **apaga tudo no fim** (nota, tag e caderno), para não mexer no
+O roteiro cria o próprio cenário — duas notas, blocos, uma tag com nome sorteado, um vínculo e um
+upload — e **apaga tudo no fim** (as notas e a tag), para não mexer no
 dado real do usuário. O que sobra é a linha de mídia sem endpoint de remoção e as linhas de
 auditoria no feed, que é aceitável.
 
@@ -17,14 +17,14 @@ auditoria no feed, que é aceitável.
 
 | o que | vira | por quê |
 |---|---|---|
-| ids que o **próprio roteiro** criou (caderno, nota, bloco, tag, vínculo, arquivo) | `<id:caderno>`, `<id:nota>`, … | o contador do destino é outro; comparar o número exato acusaria divergência em tudo |
+| ids que o **próprio roteiro** criou (nota, bloco, tag, vínculo, arquivo) | `<id:nota>`, `<id:bloco>`, … | o contador do destino é outro; comparar o número exato acusaria divergência em tudo |
 | nomes sorteados (a tag) | `<tag:nome>` | o nome é sorteado a cada execução para o delete ser seguro |
 | timestamps ISO (`created_at`, `updated_at`, `last_login_at`, `last_seen_at`, `activity_seen_at`, `expires_at`, `synced_at`, `at`) | `<timestamp>` | o relógio avança entre a gravação e a reexecução |
 | `unread` (contagem derivada do relógio) | `<contagem>` | é "eventos depois do último visto": qualquer escrita muda |
 | `id` dos itens do feed de eventos | `<id:evento>` | o id depende de quantas linhas o log já tinha |
 
 **Nada mais é mascarado, de propósito**: `/api/stats`, `counts`, `notes_count`, `position`,
-`notebook_id` das notas reais, títulos, trechos e `size` de mídia são comparados **crus** — é o
+os títulos, trechos e `size` de mídia são comparados **crus** — é o
 sinal de paridade. Por isso a gravação e a reexecução precisam ser feitas em sequência, contra a
 mesma base de dados, sem outra escrita no meio (e com o mesmo arquivo de mídia, que é fixo).
 
@@ -61,7 +61,6 @@ DEFAULT_BASE = "http://127.0.0.1:8000"
 TIMEOUT = 15
 
 # O cenário do roteiro: títulos fixos (o diff compara o texto) e conteúdo fixo.
-NOTEBOOK = {"title": "parity-check", "description": "caderno temporário de tools/parity_check.py"}
 FIRST_NOTE = {"title": "parity-nota", "text": "texto inicial do teste de paridade"}
 SECOND_NOTE = {"title": "parity-alvo", "text": "nota alvo do vínculo"}
 BLOCK = {"type": "code", "text": "print(1)", "language": "python"}
@@ -94,7 +93,7 @@ TIMESTAMP_KEYS = frozenset(
 # Contagem que anda com o relógio (eventos depois do último "visto"), não com o dado.
 CLOCK_COUNTS = frozenset({"unread"})
 ID_KEYS = frozenset(
-    {"id", "notebook_id", "note_id", "block_id", "tag_id", "source_id", "target_id"}
+    {"id", "note_id", "block_id", "tag_id", "source_id", "target_id"}
 )
 
 
@@ -108,7 +107,6 @@ def is_iso(text: str) -> bool:
 
 # Ordem determinística para desempatar um id cru que sirva a mais de uma espécie.
 TOKEN_PRIORITY = {
-    "<id:caderno>": 0,
     "<id:nota>": 1,
     "<id:bloco>": 2,
     "<id:tag>": 3,
@@ -358,23 +356,9 @@ def step_stats_baseline(run: Run) -> tuple[int, Any]:
     return run.api.json_call("GET", "/api/stats")
 
 
-def step_create_notebook(run: Run) -> tuple[int, Any]:
-    status, body = run.api.json_call("POST", "/api/notebooks", NOTEBOOK)
-    if isinstance(body, dict):
-        run.mask(body.get("id"), "<id:caderno>")
-        run.ctx["notebook"] = body.get("id")
-        # o caderno nasce com uma nota vazia: o id dela é do destino, não comparável
-        for note in body.get("notes") or []:
-            run.mask(note.get("id"), "<id:nota>")
-            for block in note.get("blocks") or []:
-                run.mask(block.get("id"), "<id:bloco>")
-    return status, body
-
-
 def step_create_note(run: Run) -> tuple[int, Any]:
-    status, body = run.api.json_call(
-        "POST", f"/api/notebooks/{run.ctx['notebook']}/notes", FIRST_NOTE
-    )
+    """A nota é a unidade: o roteiro cria a primeira direto, sem caderno no meio."""
+    status, body = run.api.json_call("POST", "/api/notes", FIRST_NOTE)
     run.mask_note(body)
     if isinstance(body, dict):
         run.ctx["note"] = body.get("id")
@@ -427,9 +411,7 @@ def step_list_tags(run: Run) -> tuple[int, Any]:
 
 
 def step_create_target_note(run: Run) -> tuple[int, Any]:
-    status, body = run.api.json_call(
-        "POST", f"/api/notebooks/{run.ctx['notebook']}/notes", SECOND_NOTE
-    )
+    status, body = run.api.json_call("POST", "/api/notes", SECOND_NOTE)
     run.mask_note(body)
     if isinstance(body, dict):
         run.ctx["target"] = body.get("id")
@@ -533,10 +515,11 @@ def step_delete_tag(run: Run) -> tuple[int, Any]:
     return run.api.json_call("DELETE", f"/api/tags/{run.ctx['tag']}")
 
 
-def step_delete_notebook(run: Run) -> tuple[int, Any]:
-    if run.ctx.get("notebook") is None:
-        return 0, {"pulado": "o caderno não chegou a ser criado"}
-    return run.api.json_call("DELETE", f"/api/notebooks/{run.ctx['notebook']}")
+def step_delete_target_note(run: Run) -> tuple[int, Any]:
+    """A segunda nota do roteiro sai no fim: a primeira já saiu no passo anterior."""
+    if run.ctx.get("target") is None:
+        return 0, {"pulado": "a nota alvo não chegou a ser criada"}
+    return run.api.json_call("DELETE", f"/api/notes/{run.ctx['target']}")
 
 
 def step_stats_after(run: Run) -> tuple[int, Any]:
@@ -550,7 +533,6 @@ STEPS: tuple[Step, ...] = (
     Step("me", 200, step_me),
     Step("me_sem_cookie", 401, step_me_without_cookie),
     Step("stats_inicial", 200, step_stats_baseline),
-    Step("criar_caderno", 201, step_create_notebook),
     Step("criar_nota", 201, step_create_note),
     Step("criar_bloco", 201, step_create_block),
     Step("editar_bloco", 200, step_patch_block),
@@ -573,7 +555,7 @@ STEPS: tuple[Step, ...] = (
     Step("nota_inexistente", 404, step_note_missing),
     Step("apagar_nota", 204, step_delete_note),
     Step("apagar_tag", 204, step_delete_tag),
-    Step("apagar_caderno", 204, step_delete_notebook),
+    Step("apagar_nota_alvo", 204, step_delete_target_note),
     Step("stats_depois", 200, step_stats_after),
 )
 
@@ -658,7 +640,7 @@ def load_fixtures(directory: Path) -> tuple[dict[str, Any], list[dict[str, Any]]
 
 
 MASK_NOTE = (
-    "[mask] ids criados pelo roteiro (caderno, nota, bloco, tag, vínculo, mídia) → <id:*>; "
+    "[mask] ids criados pelo roteiro (nota, bloco, tag, vínculo, mídia) → <id:*>; "
     "nome sorteado da tag → <tag:nome>; timestamps ISO (created_at, updated_at, last_login_at, "
     "last_seen_at, activity_seen_at, expires_at, synced_at, at) → <timestamp>; `unread` → "
     "<contagem>; id dos eventos → <id:evento>. Contagens de /api/stats, counts, notes_count e "

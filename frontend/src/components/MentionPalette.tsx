@@ -99,7 +99,6 @@ export function MentionPalette({
                 <NoteBlank size={13} weight="bold" />
                 {note.title}
               </span>
-              <span className="palette-meta">{note.notebook_title}</span>
             </button>
           </li>
         ))}

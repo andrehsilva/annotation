@@ -10,9 +10,7 @@ import { ImageModal } from "./components/ImageModal";
 import type { ImagePreview } from "./components/ImageModal";
 import { LoginView } from "./components/LoginView";
 import { NoteEditor } from "./components/NoteEditor";
-import { NotebooksView } from "./components/NotebooksView";
 import { NotesView } from "./components/NotesView";
-import { NotebookView } from "./components/NotebookView";
 import { PasswordPanel } from "./components/PasswordPanel";
 import { PdfModal } from "./components/PdfModal";
 import type { PdfPreview } from "./components/PdfModal";
@@ -25,15 +23,14 @@ import { TopBar } from "./components/TopBar";
 import { WelcomeView } from "./components/WelcomeView";
 import { Spinner } from "./components/ui";
 import { ApiError, api } from "./lib/api";
-import { notebookMatches } from "./lib/format";
+import { noteMatches } from "./lib/format";
 import { useTheme } from "./lib/theme";
 import type {
   BlockType,
   DriveStatus,
   EventFeed,
   Note,
-  Notebook,
-  NotebookSummary,
+  NoteSummary,
   SearchHit,
   Stats,
   Tag,
@@ -42,11 +39,9 @@ import type {
 } from "./lib/types";
 
 export type View =
-  | { kind: "notebooks" }
-  | { kind: "notebook"; id: number }
-  | { kind: "note"; notebookId: number; id: number }
-  | { kind: "kind"; blockType: BlockType }
   | { kind: "notes" }
+  | { kind: "note"; id: number }
+  | { kind: "kind"; blockType: BlockType }
   | { kind: "tags" }
   | { kind: "relations" }
   | { kind: "welcome" }
@@ -59,10 +54,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [passwordOpen, setPasswordOpen] = useState(false);
-  const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
+  const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [tags, setTags] = useState<TagUsage[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [notebook, setNotebook] = useState<Notebook | null>(null);
+  /** A nota aberta no editor; a lista vive em `notes`. */
   const [note, setNote] = useState<Note | null>(null);
   const [anchorBlock, setAnchorBlock] = useState<number | null>(null);
   const [view, setView] = useState<View>({ kind: "tags" });
@@ -106,12 +101,11 @@ export default function App() {
   /** Drops everything that belongs to the signed-in user: logout, and a dead cookie mid-session. */
   const resetWorkspace = useCallback(() => {
     setFilter("");
-    // Back to the startup view; the next login opens its own first notebook.
+    // Back to the startup view; the next login opens its own first note.
     setView({ kind: "tags" });
-    setNotebooks([]);
+    setNotes([]);
     setTags([]);
     setStats(null);
-    setNotebook(null);
     setNote(null);
     setAnchorBlock(null);
     setDriveStatus(null);
@@ -148,11 +142,11 @@ export default function App() {
 
   const refreshWorkspace = useCallback(async () => {
     const [list, tagList, workspaceStats] = await Promise.all([
-      api.listNotebooks(),
+      api.listNotes(),
       api.listTags(),
       api.stats(),
     ]);
-    setNotebooks(list);
+    setNotes(list);
     setTags(tagList);
     setStats(workspaceStats);
     return list;
@@ -211,15 +205,15 @@ export default function App() {
     setUser(null);
   }, [report, resetWorkspace]);
 
-  const openNotebook = useCallback(async (id: number) => {
-    setNotebook(await api.getNotebook(id));
-    setNote(null);
-    setAnchorBlock(null);
-    setView({ kind: "notebook", id });
+  /** Abrir uma nota é o único "navegar" que existe: a nota é a unidade do app. */
+  const openNote = useCallback(async (id: number, blockId: number | null = null) => {
+    setAnchorBlock(blockId);
+    setNote(await api.getNote(id));
+    setView({ kind: "note", id });
   }, []);
 
   /**
-   * O botão do fim da introdução: grava a marca na conta e leva o usuário para o primeiro caderno.
+   * O botão do fim da introdução: grava a marca na conta e leva o usuário para a primeira nota.
    * Se a API falhar, o aviso sai no toast e a tela não prende ninguém — o próximo login a reabre.
    */
   const dismissWelcome = useCallback(async () => {
@@ -228,32 +222,10 @@ export default function App() {
     } catch (error) {
       report(error);
     }
-    const first = notebooks[0];
-    if (first) await openNotebook(first.id);
-    else setView({ kind: "notebooks" });
-  }, [notebooks, openNotebook, report]);
-
-  const openNote = useCallback(
-    async (notebookId: number, id: number, blockId: number | null = null) => {
-      setAnchorBlock(blockId);
-      setNote(await api.getNote(id));
-      setView({ kind: "note", notebookId, id });
-    },
-    [],
-  );
-
-  /** Jumping through a relation can land in another notebook, so load that notebook too. */
-  const openRelatedNote = useCallback(
-    async (noteId: number, notebookId: number) => {
-      try {
-        if (notebookId !== notebook?.id) setNotebook(await api.getNotebook(notebookId));
-        await openNote(notebookId, noteId);
-      } catch (error) {
-        report(error);
-      }
-    },
-    [notebook?.id, openNote, report],
-  );
+    const first = notes[0];
+    if (first) await openNote(first.id);
+    else setView({ kind: "notes" });
+  }, [notes, openNote, report]);
 
   /** The cookie is the session: ask it who we are before loading anything of theirs. */
   useEffect(() => {
@@ -283,9 +255,10 @@ export default function App() {
         const list = await refreshWorkspace();
         if (cancelled) return;
         const first = list[0];
-        // Primeiro login: a introdução abre na frente, com o caderno esperando atrás dela.
+        // Primeiro login: a introdução abre na frente, com a nota esperando atrás dela.
         if (user.welcome_seen_at === null) setView({ kind: "welcome" });
-        else if (first) await openNotebook(first.id);
+        else if (first) await openNote(first.id);
+        else setView({ kind: "notes" });
       } catch (error) {
         if (!cancelled) report(error);
       } finally {
@@ -306,7 +279,7 @@ export default function App() {
     };
     // `user.id` e não `user`: marcar a introdução troca o objeto sem que o login tenha mudado,
     // e o fluxo de entrada não pode rodar de novo por causa disso.
-  }, [user?.id, openNotebook, refreshDriveStatus, refreshWorkspace, report, loadEvents]);
+  }, [user?.id, openNote, refreshDriveStatus, refreshWorkspace, report, loadEvents]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -324,85 +297,18 @@ export default function App() {
     const currentView = view;
     try {
       await refreshWorkspace();
-      if (currentView.kind === "notebook") setNotebook(await api.getNotebook(currentView.id));
-      if (currentView.kind === "note") setNotebook(await api.getNotebook(currentView.notebookId));
+      if (currentView.kind === "note") setNote(await api.getNote(currentView.id));
     } catch (error) {
       report(error);
     }
   }, [refreshWorkspace, report, view]);
 
-  /** Criação de caderno em voo: `+ Nota` espera ela para não escrever no caderno errado. */
-  const creatingNotebook = useRef<Promise<number | null> | null>(null);
-
-  const createNotebook = useCallback(async () => {
-    const job = (async () => {
-      try {
-        const created = await api.createNotebook("Novo caderno");
-        await refreshWorkspace();
-        setNotebook(created);
-        setNote(null);
-        setView({ kind: "notebook", id: created.id });
-        notify("Caderno criado. Renomeie no título.", "success");
-        window.setTimeout(() => {
-          document.querySelector<HTMLInputElement>(".nb-title-input")?.select();
-        }, 30);
-        return created.id;
-      } catch (error) {
-        report(error);
-        return null;
-      }
-    })();
-    creatingNotebook.current = job;
-    try {
-      return await job;
-    } finally {
-      if (creatingNotebook.current === job) creatingNotebook.current = null;
-    }
-  }, [notify, refreshWorkspace, report]);
-
-  const renameNotebook = useCallback(
-    async (id: number, patch: { title?: string; description?: string }) => {
-      try {
-        setNotebook(await api.updateNotebook(id, patch));
-        await refreshWorkspace();
-      } catch (error) {
-        report(error);
-      }
-    },
-    [refreshWorkspace, report],
-  );
-
-  const deleteNotebook = useCallback(
-    (id: number) => {
-      const target = notebooks.find((item) => item.id === id);
-      askConfirm({
-        title: "Apagar caderno",
-        message: `Tudo dentro de "${target?.title ?? id}" será apagado, incluindo ${target?.notes_count ?? 0} nota(s). Não dá para desfazer.`,
-        confirmLabel: "Apagar caderno",
-        danger: true,
-        action: async () => {
-          try {
-            await api.deleteNotebook(id);
-            const list = await refreshWorkspace();
-            const next = list.find((item) => item.id !== id);
-            if (next) await openNotebook(next.id);
-            else setView({ kind: "tags" });
-            notify("Caderno apagado", "success");
-          } catch (error) {
-            report(error);
-          }
-        },
-      });
-    },
-    [askConfirm, notebooks, notify, openNotebook, refreshWorkspace, report],
-  );
-
   const createNote = useCallback(
-    async (notebookId: number, name = "") => {
+    async (name = "") => {
       try {
-        const created = await api.createNote(notebookId, name);
-        await openNote(notebookId, created.id);
+        const created = await api.createNote(name);
         await refreshWorkspace();
+        await openNote(created.id);
         notify("Nota criada. Digite / para escolher o tipo do bloco.", "success");
       } catch (error) {
         report(error);
@@ -411,31 +317,24 @@ export default function App() {
     [notify, openNote, refreshWorkspace, report],
   );
 
-  /** Criar nota de qualquer lugar: usa o caderno aberto, senão o primeiro; sem nenhum, cria o caderno. */
-  const createNoteAnywhere = useCallback(async () => {
-    // Um caderno recém-criado ainda não está no estado: espera o que estiver em voo antes de escolher.
-    const pending = creatingNotebook.current;
-    const targetId = pending ? await pending : (notebook ?? notebooks[0])?.id ?? null;
-    if (targetId === null) {
-      await createNotebook();
-      return;
-    }
-    await createNote(targetId, "");
-  }, [createNote, createNotebook, notebook, notebooks]);
-
   const deleteNote = useCallback(
-    (notebookId: number, noteId: number) => {
-      const target = notebooks.find((item) => item.id === notebookId);
+    (id: number) => {
+      const target = notes.find((item) => item.id === id);
       askConfirm({
         title: "Apagar nota",
-        message: `Esta nota será apagada junto com seus blocos. O caderno fica com ${Math.max((target?.notes_count ?? 1) - 1, 0)} nota(s). Não dá para desfazer.`,
+        message: `“${target?.title || "Nota sem título"}” será apagada junto com os blocos, as tags e os vínculos dela. Não dá para desfazer.`,
         confirmLabel: "Apagar nota",
         danger: true,
         action: async () => {
           try {
-            await api.deleteNote(noteId);
-            await openNotebook(notebookId);
-            await refreshWorkspace();
+            await api.deleteNote(id);
+            const list = await refreshWorkspace();
+            const next = list.find((item) => item.id !== id);
+            if (next) await openNote(next.id);
+            else {
+              setNote(null);
+              setView({ kind: "notes" });
+            }
             notify("Nota apagada", "success");
           } catch (error) {
             report(error);
@@ -443,16 +342,28 @@ export default function App() {
         },
       });
     },
-    [askConfirm, notebooks, notify, openNotebook, refreshWorkspace, report],
+    [askConfirm, notes, notify, openNote, refreshWorkspace, report],
   );
 
-  const toggleNotebookTag = useCallback(
-    async (notebookId: number, tagId: number, attached: boolean) => {
+  const renameNote = useCallback(
+    async (id: number, title: string) => {
       try {
-        setNotebook(
+        setNote(await api.updateNote(id, { title }));
+        await refreshWorkspace();
+      } catch (error) {
+        report(error);
+      }
+    },
+    [refreshWorkspace, report],
+  );
+
+  const toggleNoteTag = useCallback(
+    async (noteId: number, tagId: number, attached: boolean) => {
+      try {
+        setNote(
           attached
-            ? await api.detachNotebookTag(notebookId, tagId)
-            : await api.attachNotebookTag(notebookId, tagId),
+            ? await api.detachNoteTag(noteId, tagId)
+            : await api.attachNoteTag(noteId, tagId),
         );
         await refreshWorkspace();
       } catch (error) {
@@ -482,7 +393,7 @@ export default function App() {
       const target = tags.find((item) => item.id === tagId);
       askConfirm({
         title: "Apagar tag",
-        message: `"${target?.name ?? tagId}" sai de ${target?.notebooks_count ?? 0} caderno(s) e ${target?.notes_count ?? 0} nota(s). Não dá para desfazer.`,
+        message: `"${target?.name ?? tagId}" sai de ${target?.notes_count ?? 0} nota(s). Não dá para desfazer.`,
         confirmLabel: "Apagar tag",
         danger: true,
         action: async () => {
@@ -501,31 +412,31 @@ export default function App() {
 
   const openTag = useCallback(
     (name: string) => {
-      const matches = notebooks.filter((notebook) => notebookMatches(notebook, name)).length;
+      const matches = notes.filter((entry) => noteMatches(entry, name)).length;
       setFilter(name);
       setSidebarOpen(true); // the filter lives in the side list, so it has to be on screen
+      setView({ kind: "notes" });
       notify(
         matches === 0
-          ? `Nenhum caderno com a tag "${name}"`
-          : `${matches} caderno${matches === 1 ? "" : "s"} com a tag "${name}"`,
+          ? `Nenhuma nota com a tag "${name}"`
+          : `${matches} nota${matches === 1 ? "" : "s"} com a tag "${name}"`,
         matches === 0 ? "info" : "success",
       );
     },
-    [notebooks, notify],
+    [notes, notify],
   );
 
   const navigateHit = useCallback(
     async (hit: SearchHit) => {
       setSearchOpen(false);
       try {
-        if (hit.kind === "notebook" && hit.notebook_id) await openNotebook(hit.notebook_id);
-        else if (hit.kind === "tag") openTag(hit.title);
-        else if (hit.note_id && hit.notebook_id) await openNote(hit.notebook_id, hit.note_id);
+        if (hit.kind === "tag") openTag(hit.title);
+        else if (hit.note_id) await openNote(hit.note_id, hit.kind === "block" ? hit.id : null);
       } catch (error) {
         report(error);
       }
     },
-    [openNotebook, openNote, openTag, report],
+    [openNote, openTag, report],
   );
 
   if (checkingSession) {
@@ -554,7 +465,7 @@ export default function App() {
         />
       );
     }
-    if (view.kind === "welcome" && user) {
+    if (view.kind === "welcome") {
       return <WelcomeView user={user} onDismiss={() => void dismissWelcome()} />;
     }
     if (view.kind === "note" && note) {
@@ -562,62 +473,18 @@ export default function App() {
         <NoteEditor
           note={note}
           tags={tags}
-          notebookTitle={notebook?.title ?? ""}
           anchorBlockId={anchorBlock}
-          onBack={() => void openNotebook(view.notebookId)}
-          onOpenNote={(noteId, notebookId) => void openRelatedNote(noteId, notebookId)}
+          onBack={() => setView({ kind: "notes" })}
+          onOpenNote={(noteId, blockId) => void openNote(noteId, blockId)}
           onWorkspaceChange={syncAfterEdit}
           onCreateTag={createTag}
-          onError={report}
-          onToggleTag={async (tagId, attached) => {
-            try {
-              const updated = attached
-                ? await api.detachNoteTag(note.id, tagId)
-                : await api.attachNoteTag(note.id, tagId);
-              setNote(updated);
-              await refreshWorkspace();
-            } catch (error) {
-              report(error);
-            }
-          }}
-          onRenameNote={async (title) => {
-            try {
-              await api.updateNote(note.id, { title });
-              setNote((current) => (current ? { ...current, title } : current));
-            } catch (error) {
-              report(error);
-            }
-          }}
+          onToggleTag={(tagId, attached) => void toggleNoteTag(note.id, tagId, attached)}
+          onRenameNote={(title) => void renameNote(note.id, title)}
+          onDeleteNote={() => deleteNote(note.id)}
           onOpenImage={setImage}
           onOpenPdf={setPdf}
-        />
-      );
-    }
-    if (view.kind === "notebook" && notebook) {
-      return (
-        <NotebookView
-          notebook={notebook}
-          tags={tags}
-          onCreateTag={createTag}
-          onOpenNote={(noteId) => void openNote(notebook.id, noteId)}
-          onCreateNote={(text) => void createNote(notebook.id, text)}
-          onDeleteNote={(noteId) => deleteNote(notebook.id, noteId)}
-          onRename={(patch) => void renameNotebook(notebook.id, patch)}
-          onDelete={() => deleteNotebook(notebook.id)}
-          onToggleTag={(tagId, attached) => void toggleNotebookTag(notebook.id, tagId, attached)}
-          onOpenNotebook={(id) => void openNotebook(id)}
-          onChanged={() => void syncAfterEdit()}
           onNotify={notify}
           onError={report}
-        />
-      );
-    }
-    if (view.kind === "notebooks") {
-      return (
-        <NotebooksView
-          notebooks={notebooks}
-          onOpenNotebook={(id) => void openNotebook(id)}
-          onCreateNotebook={() => void createNotebook()}
         />
       );
     }
@@ -625,7 +492,7 @@ export default function App() {
       return (
         <KindView
           blockType={view.blockType}
-          onOpenNote={openNote}
+          onOpenNote={(noteId, blockId) => void openNote(noteId, blockId)}
           onOpenImage={setImage}
           onOpenPdf={setPdf}
           onError={report}
@@ -642,21 +509,22 @@ export default function App() {
         />
       );
     }
-    if (view.kind === "notes") {
+    if (view.kind === "relations") {
       return (
-        <NotesView
-          onOpenNote={(noteId, notebookId) => void openRelatedNote(noteId, notebookId)}
+        <RelationsView
+          onOpenNote={(noteId) => void openNote(noteId)}
+          onChanged={() => void refreshWorkspace()}
           onError={report}
+          onNotify={notify}
+          onAskConfirm={askConfirm}
         />
       );
     }
     return (
-      <RelationsView
-        onOpenNote={(noteId, notebookId) => void openRelatedNote(noteId, notebookId)}
-        onChanged={() => void refreshWorkspace()}
-        onError={report}
-        onNotify={notify}
-        onAskConfirm={askConfirm}
+      <NotesView
+        notes={notes.filter((entry) => noteMatches(entry, filter))}
+        onOpenNote={(id) => void openNote(id)}
+        onCreateNote={() => void createNote()}
       />
     );
   })();
@@ -671,7 +539,7 @@ export default function App() {
         driveConnected={driveStatus?.connected ?? false}
         onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
         onNavigate={setView}
-        onHome={() => setView({ kind: "notebooks" })}
+        onHome={() => setView({ kind: "notes" })}
         onOpenSearch={() => setSearchOpen(true)}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onOpenDrive={openDrive}
@@ -683,22 +551,21 @@ export default function App() {
         bellOpen={bellOpen}
         onBellOpenChange={changeBell}
         onAllRead={markEventsRead}
-        onNewNotebook={() => void createNotebook()}
-        onNewNote={createNoteAnywhere}
+        onNewNote={() => void createNote()}
 
         sidebarOpen={sidebarOpen}
       />
       <div className={sidebarOpen ? "app-body" : "app-body is-sidebar-hidden"}>
         {sidebarOpen && (
           <Sidebar
-            notebooks={notebooks}
+            notes={notes}
             tags={tags}
             stats={stats}
             view={view}
             filter={filter}
             onFilter={setFilter}
-            onSelectNotebook={(id) => void openNotebook(id)}
-            onCreateNotebook={() => void createNotebook()}
+            onSelectNote={(id) => void openNote(id)}
+            onCreateNote={() => void createNote()}
             onOpenTag={openTag}
             onClose={() => setSidebarOpen(false)}
           />

@@ -6,7 +6,7 @@
 
 Toda decisão de forma está no SPEC abaixo e vem de `app/models.py`:
 
-* chave composta: as junções que **não expõem id** (`note_tags`, `notebook_tags`, `notebook_members`)
+* chave composta: as junções que **não expõem id** (`note_tags`, `note_members`, `group_members`)
   usam o rowId composto (`"<a>_<b>"`) — o `$id` é a chave primária e o "único por par" sai de graça.
   Já `note_relations` e `block_links` usam rowId **numérico** com índice `unique` no par, porque o id
   delas vai para a API e o SPA usa no `DELETE`; medido: índice unique de duas colunas funciona aqui e
@@ -149,33 +149,6 @@ TABLE_SPECS: list[dict[str, Any]] = [
         "indexes": [{"key": "idx_sessions_user", "type": "key", "columns": ["user_id"]}],
     },
     {
-        "id": "notebooks",
-        "name": "Cadernos",
-        "columns": [
-            col("title", "string", True, 160),
-            col("description", "string", size=4000),
-            col(OWNER, "string", True, 36),
-            col("created_at", "datetime"),
-            col("updated_at", "datetime"),
-        ],
-        "indexes": [{"key": "idx_notebooks_owner", "type": "key", "columns": [OWNER]}],
-    },
-    {
-        "id": "notebook_members",
-        "name": "Membros do caderno",
-        # rowId = "<user_id>_<notebook_id>"
-        "columns": [
-            col("user_id", "string", True, 36),
-            col("notebook_id", "string", True, 36),
-            col("role", "string", True, 16),
-            col("created_at", "datetime"),
-        ],
-        "indexes": [
-            {"key": "idx_members_user", "type": "key", "columns": ["user_id"]},
-            {"key": "idx_members_notebook", "type": "key", "columns": ["notebook_id"]},
-        ],
-    },
-    {
         "id": "groups",
         "name": "Grupos",
         # Grupos de contas, criados e mantidos pelo admin: são eles o público do compartilhamento.
@@ -201,33 +174,19 @@ TABLE_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "notebook_groups",
-        "name": "Grupos do caderno",
-        # rowId = "<notebook_id>_<group_id>": o caderno compartilhado com o grupo, com o papel que
-        # vale para todo mundo dele (o papel mais alto entre esta linha e a linha direta do membro).
-        "columns": [
-            col("notebook_id", "string", True, 36),
-            col("group_id", "string", True, 36),
-            col("role", "string", True, 16),
-            col("created_at", "datetime"),
-        ],
-        "indexes": [
-            {"key": "idx_notebook_groups_notebook", "type": "key", "columns": ["notebook_id"]},
-            {"key": "idx_notebook_groups_group", "type": "key", "columns": ["group_id"]},
-        ],
-    },
-    {
+        # A nota é a unidade do app: tem dono, é ela que se compartilha e se relaciona. `position` é a
+        # ordem na lista de quem pediu; `owner` é quem a criou.
         "id": "notes",
         "name": "Notas",
         "columns": [
-            col("notebook_id", "string", True, 36),
+            col(OWNER, "string", True, 36),
             col("title", "string", size=200),
             col("position", "integer", True),
             col("created_at", "datetime"),
             col("updated_at", "datetime"),
         ],
         "indexes": [
-            {"key": "idx_notes_notebook", "type": "key", "columns": ["notebook_id"]},
+            {"key": "idx_notes_owner", "type": "key", "columns": [OWNER]},
             {"key": "idx_notes_position", "type": "key", "columns": ["position"]},
             {"key": "idx_notes_updated", "type": "key", "columns": ["updated_at"]},
         ],
@@ -244,7 +203,7 @@ TABLE_SPECS: list[dict[str, Any]] = [
             col("url", "string", size=2000),
             col("caption", "string", size=2000),
             # Quem escreveu o bloco: é o que a nota compartilhada mostra em cada bloco que não é seu.
-            # Vazio nas linhas de antes desta coluna — quem escrevia, aí, era o dono do caderno.
+            # Vazio nas linhas de antes desta coluna — quem escrevia, aí, era o dono da nota.
             col("created_by", "string", False, 36),
             col("created_at", "datetime"),
             col("updated_at", "datetime"),
@@ -271,17 +230,34 @@ TABLE_SPECS: list[dict[str, Any]] = [
         ],
     },
     {
-        "id": "notebook_tags",
-        "name": "Tags do caderno",
-        # rowId = "<notebook_id>_<tag_id>"
+        "id": "note_members",
+        "name": "Membros da nota",
+        # rowId = "<user_id>_<note_id>"
         "columns": [
-            col("notebook_id", "string", True, 36),
-            col("tag_id", "string", True, 36),
+            col("user_id", "string", True, 36),
+            col("note_id", "string", True, 36),
+            col("role", "string", True, 16),
             col("created_at", "datetime"),
         ],
         "indexes": [
-            {"key": "idx_notebook_tags_notebook", "type": "key", "columns": ["notebook_id"]},
-            {"key": "idx_notebook_tags_tag", "type": "key", "columns": ["tag_id"]},
+            {"key": "idx_note_members_user", "type": "key", "columns": ["user_id"]},
+            {"key": "idx_note_members_note", "type": "key", "columns": ["note_id"]},
+        ],
+    },
+    {
+        "id": "note_groups",
+        "name": "Grupos da nota",
+        # rowId = "<note_id>_<group_id>": a nota compartilhada com o grupo, com o papel que vale para
+        # todo mundo dele (o mais alto entre esta linha e a linha direta do membro).
+        "columns": [
+            col("note_id", "string", True, 36),
+            col("group_id", "string", True, 36),
+            col("role", "string", True, 16),
+            col("created_at", "datetime"),
+        ],
+        "indexes": [
+            {"key": "idx_note_groups_note", "type": "key", "columns": ["note_id"]},
+            {"key": "idx_note_groups_group", "type": "key", "columns": ["group_id"]},
         ],
     },
     {
@@ -346,7 +322,7 @@ TABLE_SPECS: list[dict[str, Any]] = [
     {
         "id": "events",
         "name": "Atividade",
-        # `notebook_id` é o que deixa os membros verem a atividade do caderno compartilhado (o evento
+        # `note_id` é o que deixa quem recebeu a nota compartilhada ver a atividade dela (o evento
         # continua sendo de quem agiu; a coluna diz onde a ação aconteceu).
         "columns": [
             col("user_id", "string", True, 36),
@@ -354,19 +330,19 @@ TABLE_SPECS: list[dict[str, Any]] = [
             col("entity", "string", True, 24),
             col("target", "string", size=200),
             col("detail", "string", size=80),
-            col("notebook_id", "string", False, 36),
+            col("note_id", "string", False, 36),
             col("created_at", "datetime", True),
         ],
         "indexes": [
             {"key": "idx_events_user", "type": "key", "columns": ["user_id"]},
-            {"key": "idx_events_notebook", "type": "key", "columns": ["notebook_id"]},
+            {"key": "idx_events_note", "type": "key", "columns": ["note_id"]},
             {"key": "idx_events_created", "type": "key", "columns": ["created_at"]},
         ],
     },
     {
         "id": "drive_files",
         "name": "Arquivos no Drive",
-        # rowId = "<user_id>_<note_id>": o espelho é de **cada conta**. Com o caderno compartilhado,
+        # rowId = "<user_id>_<note_id>": o espelho é de **cada conta**. Com a nota compartilhada,
         # o rowId só pela nota fazia dois membros disputarem a mesma linha — o segundo encontrava a
         # linha do primeiro e concluía que a nota dele já estava no Drive.
         "columns": [
@@ -393,7 +369,7 @@ TABLE_SPECS: list[dict[str, Any]] = [
     {
         "id": "counters",
         "name": "Contadores de id",
-        # rowId = nome do contador ("note", "notebook", ...). Avança com incrementRowColumn.
+        # rowId = nome do contador ("note", "block", ...). Avança com incrementRowColumn.
         "columns": [col("value", "integer", True)],
         "indexes": [],
     },
@@ -665,7 +641,52 @@ def print_spec() -> None:
     )
 
 
-def run(apply: bool) -> int:
+def prune(tables: TablesDB, apply: bool) -> bool:
+    """O que está na instância e **não** está no schema: tabelas e colunas que sobraram.
+
+    O schema é a fonte da verdade, então o que saiu dele tem de sair da instância — foi assim que o
+    caderno deixou de existir: as quatro tabelas dele e a coluna `notes.notebook_id`. Apagar é
+    destrutivo, então só com `--prune` explícito; sem ele, isto é relatório (e o `--check` acusa).
+    """
+    known = {spec["id"]: spec for spec in TABLE_SPECS}
+    changed = False
+    try:
+        rows = tables.list_tables(DATABASE_ID).get("tables", [])
+    except AppwriteException as error:
+        # Database ausente (instância nova): não há sobra para procurar — quem cria é o `--apply`.
+        if is_missing(error):
+            return False
+        raise
+    for row in rows:
+        table_id = row.get("$id") or row.get("id")
+        spec = known.get(table_id)
+        if spec is None:
+            if apply:
+                tables.delete_table(DATABASE_ID, table_id)
+            log(f"[schema] {'-' if apply else 'sobra'} tabela {table_id}")
+            changed = True
+            continue
+        if apply and not all(column["key"] in {c["key"] for c in spec["columns"]} for column in row.get("columns", [])):
+            pass  # as colunas são conferidas abaixo, uma a uma
+        for column in row.get("columns") or []:
+            key = column.get("key")
+            if key in {c["key"] for c in spec["columns"]}:
+                continue
+            # Índice que usa a coluna sai antes dela, senão o servidor recusa a remoção.
+            for index in row.get("indexes") or []:
+                if key in (index.get("columns") or []):
+                    if apply:
+                        tables.delete_index(DATABASE_ID, table_id, index.get("key") or index.get("$id"))
+                    log(f"[schema] {'-' if apply else 'sobra'} índice {table_id}.{index.get('key')}")
+                    changed = True
+            if apply:
+                tables.delete_column(DATABASE_ID, table_id, key)
+            log(f"[schema] {'-' if apply else 'sobra'} coluna {table_id}.{key}")
+            changed = True
+    return changed
+
+
+def run(apply: bool, prune_extra: bool = False) -> int:
     connection = client()
     tables = TablesDB(connection)
     storage = Storage(connection)
@@ -675,6 +696,9 @@ def run(apply: bool) -> int:
         for spec in TABLE_SPECS:
             missing = ensure_table(tables, spec, apply) or missing
         missing = ensure_bucket(storage, apply) or missing
+        # Sem `--prune` isto é relatório: o que saiu do schema aparece no `--check` (e no `--apply`
+        # como sobra), mas nada é apagado sem a flag explícita.
+        missing = prune(tables, apply=apply and prune_extra) or missing
     except AppwriteException as error:
         log(f"[schema] Appwrite recusou ({error.code} {error.type}): {error.message}")
         return 2
@@ -692,6 +716,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spec", action="store_true", help="imprime o schema declarado (offline)")
     parser.add_argument("--check", action="store_true", help="relata o que falta, sem criar nada")
     parser.add_argument("--apply", action="store_true", help="cria o que falta")
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="com --apply, apaga tabela/coluna que saiu do schema (destrutivo)",
+    )
     args = parser.parse_args(argv)
 
     if args.spec:
@@ -699,7 +728,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not (args.check or args.apply):
         parser.error("escolha --spec, --check ou --apply")
-    return run(apply=args.apply)
+    if args.prune and not args.apply:
+        parser.error("--prune só faz sentido junto com --apply")
+    return run(apply=args.apply, prune_extra=args.prune)
 
 
 if __name__ == "__main__":
