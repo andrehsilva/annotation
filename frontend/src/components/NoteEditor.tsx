@@ -70,6 +70,7 @@ export function NoteEditor({
   // A API separa as duas coisas: `editor` escreve blocos e aplica tags, mas renomear (PATCH) e
   // apagar a nota são do dono — a tela não oferece o que a rota nega.
   const canRename = isOwner;
+  const isShared = note.shared || note.shared_groups.length > 0;
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [focusId, setFocusId] = useState<number | null>(null);
   const [highlightId, setHighlightId] = useState<number | null>(null);
@@ -392,6 +393,10 @@ export function NoteEditor({
           <Key>Ctrl</Key>
           <Key>K</Key> busca
         </span>
+        <span className="hint">
+          <Key>Ctrl</Key>
+          <Key>/</Key> atalhos
+        </span>
       </footer>
     </div>
   );
@@ -486,34 +491,48 @@ export function NoteEditor({
             <ArrowsDownUp size={16} weight="bold" />
           </button>
         </div>
-        <input
-          className={canRename ? "note-title-input" : "note-title-input is-readonly"}
-          value={title}
-          placeholder="Título da nota"
-          maxLength={200}
-          readOnly={!canRename}
-          title={canRename ? undefined : "Só o dono renomeia a nota"}
-          onChange={(event) => setTitle(event.target.value)}
-          onBlur={() => title !== note.title && void onRenameNote(title)}
-        />
+        {/* Título e tags na mesma linha: a nota é uma coisa só, e as tags são parte do nome dela. */}
+        <div className="note-head">
+          <input
+            className={canRename ? "note-title-input" : "note-title-input is-readonly"}
+            value={title}
+            placeholder="Título da nota"
+            maxLength={200}
+            readOnly={!canRename}
+            title={canRename ? undefined : "Só o dono renomeia a nota"}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => title !== note.title && void onRenameNote(title)}
+          />
+          <TagRow
+            attached={note.tags}
+            all={tags}
+            onCreate={onCreateTag}
+            onToggle={(tag, attached) => void onToggleTag(tag.id, attached)}
+            readOnly={!canEdit}
+          />
+        </div>
         <p className="note-meta">
-          <ShareBadge note={note} />
+          {/*
+            Nota compartilhada não tem botão: o **chip** é o botão. Sem compartilhamento (e sendo eu o
+            dono), aí sim aparece **Compartilhar** — é o único caminho para abrir o painel.
+          */}
+          <ShareBadge note={note} onClick={() => setShareOpen(true)} />
+          {isOwner && !isShared && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
+              onClick={() => setShareOpen(true)}
+              title="Compartilhar a nota com um grupo"
+            >
+              <UsersThree size={15} />
+              Compartilhar
+            </button>
+          )}
           <span>
             {totalBlocks} {totalBlocks === 1 ? "bloco" : "blocos"}
           </span>
           <span>atualizado {relativeTime(note.updated_at)}</span>
           <span className="note-meta-actions">
-            {isOwner && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-compact"
-                onClick={() => setShareOpen(true)}
-                title="Compartilhar a nota com um grupo"
-              >
-                <UsersThree size={15} />
-                Compartilhar
-              </button>
-            )}
             {isOwner && (
               <button
                 type="button"
@@ -527,13 +546,6 @@ export function NoteEditor({
             )}
           </span>
         </p>
-        <TagRow
-          attached={note.tags}
-          all={tags}
-          onCreate={onCreateTag}
-          onToggle={(tag, attached) => void onToggleTag(tag.id, attached)}
-          readOnly={!canEdit}
-        />
       </header>
 
       {newestFirst && tools}
@@ -609,7 +621,7 @@ export function NoteEditor({
       {!newestFirst && tail}
       {!newestFirst && tools}
 
-      {shareOpen && isOwner && (
+      {shareOpen && (
         <ShareModal
           note={note}
           onClose={() => setShareOpen(false)}

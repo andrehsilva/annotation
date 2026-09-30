@@ -1,9 +1,9 @@
 # NotAI
 
-Caderno de anotações para tudo o que se escreve — código, receita, ideia, reunião. A **nota** é a
-unidade: tem dono, guarda os **blocos** de seis tipos — `texto`, `código`, `url`, `imagem`, `vídeo`,
-`pdf` — e é ela que se compartilha com grupos e se relaciona com outras notas. O texto corre livre e
-o tipo do bloco troca no teclado, sem tirar a mão da linha.
+Caderno de anotações para **desenvolvedores**. A **nota** é a unidade: tem dono, guarda os **blocos**
+de seis tipos — `texto`, `código`, `url`, `imagem`, `vídeo`, `pdf` — e é ela que se compartilha com
+grupos e se relaciona com outras notas. O texto corre livre e o tipo do bloco troca no teclado, sem
+tirar a mão da linha.
 
 Cada pessoa entra com **e-mail e senha** e enxerga as próprias notas — e as que o dono compartilhou
 com os grupos dela. Fora dessas, blocos, tags, vínculos e arquivos são de quem os criou. Quem cria as
@@ -172,6 +172,7 @@ mesmo e-mail em quinze minutos respondem `429` com `Retry-After`.
 | `Alt+Enter` | Novo bloco de código mesmo dentro de um bloco de código |
 | `Backspace` | Em um bloco vazio, apaga o bloco e volta o foco para o anterior |
 | `Arrastar` o handle `⠿` | Reordena blocos |
+| `Ctrl+/` | Abre a lista de atalhos (o mesmo lugar do `?` de outros apps, sem colidir com o navegador) |
 | `Esc` | Fecha a paleta de tags, o menu de tipo, a busca ou o modal de confirmação |
 
 > **Por que não `Alt+Espaço` / `Ctrl+Espaço`:** no Windows o `Alt+Espaço` abre o menu da janela e o

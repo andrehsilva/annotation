@@ -1,21 +1,19 @@
-import { GraphIcon, NoteBlank, Plus, SidebarSimple, Tag as TagIcon } from "@phosphor-icons/react";
+import { GraphIcon, Plus, SidebarSimple } from "@phosphor-icons/react";
 
 import type { View } from "../App";
 import { KIND_ICONS } from "../lib/kinds";
 import { KIND_ORDER, KIND_LABELS, noteMatches } from "../lib/format";
-import type { NoteSummary, Stats, TagUsage } from "../lib/types";
+import type { NoteSummary, Stats } from "../lib/types";
 import { ShareBadge } from "./ShareBadge";
 
 interface SidebarProps {
   notes: NoteSummary[];
-  tags: TagUsage[];
   stats: Stats | null;
   view: View;
   filter: string;
   onFilter: (value: string) => void;
   onSelectNote: (id: number) => void;
   onCreateNote: () => void;
-  onOpenTag: (name: string) => void;
   onClose: () => void;
 }
 
@@ -27,14 +25,12 @@ interface SidebarProps {
  */
 export function Sidebar({
   notes,
-  tags,
   stats,
   view,
   filter,
   onFilter,
   onSelectNote,
   onCreateNote,
-  onOpenTag,
   onClose,
 }: SidebarProps) {
   const visible = notes.filter((note) => noteMatches(note, filter));
@@ -92,23 +88,19 @@ export function Sidebar({
             <span className="side-note-head">
               <span className="side-note-title">{note.title || "Nota sem título"}</span>
               <ShareBadge note={note} compact />
-              <span className="side-note-count" title={`${note.counts.text} blocos de texto`}>
-                <NoteBlank size={13} />
-                {Object.values(note.counts).reduce((total, count) => total + count, 0)}
-              </span>
             </span>
             <span className="note-counts">
-              {KIND_ORDER.map((kind) => {
+              {/* Só o que existe: tipo com zero não entra, e nota sem bloco nenhum não tem linha. */}
+              {KIND_ORDER.filter((kind) => note.counts[kind] > 0).map((kind) => {
                 const KindIcon = KIND_ICONS[kind];
-                const total = note.counts[kind];
                 return (
                   <span
                     key={kind}
-                    className={total > 0 ? "count-chip" : "count-chip is-zero"}
-                    title={`${total} ${KIND_LABELS[kind]}`}
+                    className="count-chip"
+                    title={`${note.counts[kind]} ${KIND_LABELS[kind]}`}
                   >
                     <KindIcon size={12} weight="bold" />
-                    {total}
+                    {note.counts[kind]}
                   </span>
                 );
               })}
@@ -121,29 +113,6 @@ export function Sidebar({
             </span>
           </button>
         ))}
-      </div>
-
-      <div className="sidebar-section">
-        <TagIcon size={13} weight="bold" />
-        <span>Tags</span>
-      </div>
-      <div className="tag-cloud">
-        {tags.length === 0 ? (
-          <p className="sidebar-hint">Ctrl+Espaço dentro de uma nota cria tags.</p>
-        ) : (
-          tags.map((tag) => (
-            <button
-              type="button"
-              key={tag.id}
-              className="tag-chip"
-              onClick={() => onOpenTag(tag.name)}
-              title={`${tag.notes_count} nota(s) com esta tag`}
-            >
-              {tag.name}
-              <span className="tag-count">{tag.notes_count}</span>
-            </button>
-          ))
-        )}
       </div>
 
       <div className="sidebar-foot">

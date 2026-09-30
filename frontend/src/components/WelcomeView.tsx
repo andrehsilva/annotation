@@ -29,7 +29,8 @@ const STEPS: Step[] = [
     body: (
       <>
         Cada nota guarda os seus <strong>blocos</strong> — texto, código, url, imagem, vídeo e pdf —,
-        as tags e os vínculos. Não há pasta: a lista lateral mostra todas as notas que você alcança.
+        as tags e os vínculos. Não há pasta: a lista lateral mostra todas as notas que você alcança, e
+        o que você quer é escrever e voltar depois.
       </>
     ),
   },
@@ -40,8 +41,8 @@ const STEPS: Step[] = [
     body: (
       <>
         <Key>/</Key> no bloco vazio escolhe o tipo (<Key>Ctrl</Key>+<Key>Shift</Key>+<Key>L</Key> com
-        texto), <Key>Enter</Key> cria o próximo, <Key>⠿</Key> reordena e <Key>Ctrl</Key>+<Key>K</Key>{" "}
-        busca em tudo.
+        texto), <Key>Enter</Key> cria o próximo, <Key>⠿</Key> reordena, <Key>Ctrl</Key>+<Key>K</Key>{" "}
+        busca em tudo e <Key>Ctrl</Key>+<Key>/</Key> mostra a lista completa de atalhos.
       </>
     ),
   },
@@ -98,7 +99,7 @@ export function WelcomeView({ user, onDismiss }: { user: User; onDismiss: () => 
           Boas-vindas, {user.display_name || user.email}
         </h1>
         <p className="view-lede">
-          Um caderno para tudo o que você anota. Em cinco cartões, o que o app faz — e o botão do fim
+          Um caderno de anotações para devs. Em cinco cartões, o que o app faz — e o botão do fim
           decide se esta tela volta.
         </p>
       </header>

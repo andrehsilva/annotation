@@ -1,4 +1,5 @@
 import { LinkSimple, Plus, Trash } from "@phosphor-icons/react";
+import { useState } from "react";
 
 import type { NoteRelated } from "../lib/types";
 
@@ -9,12 +10,44 @@ interface NoteLinksProps {
   onRemoveRelation: (relationId: number) => void;
 }
 
-/** Footer of the editor: what this note declares, what it cites, and where it is cited. */
+/**
+ * O rodapé de vínculos da nota, **recolhido**: uma linha com o botão **+** (relacionar) e a contagem.
+ *
+ * A tela fica no conteúdo — os blocos — e não na informação sobre eles. As listas (o que a nota
+ * declara, o que cita e onde é citada) abrem quando a contagem é clicada, e continuam ali inteiras.
+ */
 export function NoteLinks({ related, onOpenNote, onRelate, onRemoveRelation }: NoteLinksProps) {
   const { relations, mentions, backlinks } = related;
+  const [open, setOpen] = useState(false);
 
   return (
     <section className="note-links">
+      <div className="note-links-bar">
+        <button
+          type="button"
+          className="btn btn-ghost btn-compact"
+          onClick={onRelate}
+          title="Relacionar esta nota com outra"
+        >
+          <Plus size={14} weight="bold" />
+          Relacionar
+        </button>
+        <button
+          type="button"
+          className="link"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          title={open ? "Esconder os vínculos" : "Ver os vínculos desta nota"}
+        >
+          {relations.length} {relations.length === 1 ? "relação" : "relações"}
+          {mentions.length > 0 && ` · ${mentions.length} menção${mentions.length === 1 ? "" : "es"}`}
+          {backlinks.length > 0 && ` · citada ${backlinks.length}x`}
+        </button>
+      </div>
+
+      {open && (
+        <>
+
       <div className="note-links-group">
         <h2 className="panel-title">
           <LinkSimple size={13} weight="bold" /> Relacionadas
@@ -94,6 +127,8 @@ export function NoteLinks({ related, onOpenNote, onRelate, onRemoveRelation }: N
             ))}
           </ul>
         </div>
+      )}
+        </>
       )}
     </section>
   );

@@ -15,6 +15,7 @@ import { PasswordPanel } from "./components/PasswordPanel";
 import { PdfModal } from "./components/PdfModal";
 import type { PdfPreview } from "./components/PdfModal";
 import { RelationsView } from "./components/RelationsView";
+import { ShortcutsModal } from "./components/ShortcutsModal";
 import { Sidebar } from "./components/Sidebar";
 import { TagsView } from "./components/TagsView";
 import { ToastStack } from "./components/ToastStack";
@@ -63,6 +64,7 @@ export default function App() {
   const [view, setView] = useState<View>({ kind: "tags" });
   const [ready, setReady] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
@@ -119,6 +121,7 @@ export default function App() {
     setImage(null);
     setPdf(null);
     setSearchOpen(false);
+    setShortcutsOpen(false);
     setDriveOpen(false);
     setReady(false);
   }, []);
@@ -283,9 +286,16 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") {
         event.preventDefault();
         setSearchOpen(true);
+      }
+      // `Ctrl+/` (e o `Ctrl+Shift+7`, que é o mesmo `?` de alguns teclados) abre a lista de atalhos.
+      if (key === "/" || event.code === "Slash") {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -559,14 +569,12 @@ export default function App() {
         {sidebarOpen && (
           <Sidebar
             notes={notes}
-            tags={tags}
             stats={stats}
             view={view}
             filter={filter}
             onFilter={setFilter}
             onSelectNote={(id) => void openNote(id)}
             onCreateNote={() => void createNote()}
-            onOpenTag={openTag}
             onClose={() => setSidebarOpen(false)}
           />
         )}
@@ -575,6 +583,7 @@ export default function App() {
       {searchOpen && (
         <CommandPalette onClose={() => setSearchOpen(false)} onNavigate={(hit) => void navigateHit(hit)} />
       )}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
       {driveOpen && driveStatus && (
         <DrivePanel
           status={driveStatus}

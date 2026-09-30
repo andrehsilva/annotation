@@ -68,15 +68,16 @@ export function TopBar({
   const [bellBox, setBellBox] = useState<{ top: number; right: number } | null>(null);
   const unread = feed?.unread ?? 0;
 
-  /**
-   * **Atividade** fecha o menu do nome e abre o painel no canto direito, como o menu de ⋯ — dentro do
-   * popover ele ficaria clipado e por cima do próprio menu.
-   */
-  const openActivity = () => {
-    const rect = menuRef.current?.getBoundingClientRect();
-    setBellBox(
-      rect ? { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) } : null,
-    );
+  const bellRef = useRef<HTMLDivElement | null>(null);
+
+  /** O sino abre a página de atividade ancorada nele, como o menu de ⋯ (o popover é `fixed`). */
+  const toggleActivity = () => {
+    if (bellOpen) {
+      onBellOpenChange(false);
+      return;
+    }
+    const rect = bellRef.current?.getBoundingClientRect();
+    setBellBox(rect ? { top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) } : null);
     onBellOpenChange(true);
   };
 
@@ -381,19 +382,6 @@ export function TopBar({
           {menuOpen && (
             <div className="user-popover" role="menu">
               <p className="user-popover-head">{user.email}</p>
-              <button
-                type="button"
-                role="menuitem"
-                className="user-popover-item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  openActivity();
-                }}
-              >
-                <Bell size={14} weight="bold" />
-                Atividade
-                {unread > 0 && <span className="user-popover-hint">{unread}</span>}
-              </button>
               {user.role === "admin" && (
                 <button
                   type="button"
@@ -457,6 +445,20 @@ export function TopBar({
               </button>
             </div>
           )}
+        </div>
+        <div className="activity-menu" ref={bellRef}>
+          <button
+            type="button"
+            className={bellOpen ? "topnav-chip is-active" : "topnav-chip"}
+            onClick={toggleActivity}
+            title="Atividade"
+            aria-label="Atividade"
+            aria-haspopup="menu"
+            aria-expanded={bellOpen}
+          >
+            <Bell size={15} weight="bold" />
+            {unread > 0 && <span className="activity-badge">{unread}</span>}
+          </button>
         </div>
         <ActivityPanel
           feed={feed}

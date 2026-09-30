@@ -16,9 +16,12 @@ const CHIP_GROUPS = 2;
 export function ShareBadge({
   note,
   compact = false,
+  onClick,
 }: {
   note: NoteSummary;
   compact?: boolean;
+  /** Com `onClick` o chip **é** o botão: o painel de compartilhar abre por ele. */
+  onClick?: () => void;
 }) {
   const copy = shareCopy(note);
   if (!copy) return null;
@@ -28,6 +31,14 @@ export function ShareBadge({
       <span className="side-note-shared" title={copy.title}>
         <Icon size={12} weight="bold" />
       </span>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" className="tag-chip is-shared" title={copy.title} onClick={onClick}>
+        <Icon size={11} weight="bold" />
+        {copy.text}
+      </button>
     );
   }
   return (
