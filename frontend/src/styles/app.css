@@ -510,11 +510,28 @@ textarea {
 
 .sidebar-foot {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 14px;
   border-top: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 12px;
+}
+
+/* O crédito, em letra miúda: discreto, mas sempre à mão. */
+.sidebar-credit {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.sidebar-credit a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.sidebar-credit a:hover {
+  color: var(--primary);
+  text-decoration: underline;
 }
 
 .side-note-list {

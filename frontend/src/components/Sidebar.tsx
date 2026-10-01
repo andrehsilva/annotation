@@ -116,11 +116,24 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-foot">
-        {stats
-          ? `${stats.notes} nota${stats.notes === 1 ? "" : "s"} · ${stats.blocks} bloco${
-              stats.blocks === 1 ? "" : "s"
-            } · ${stats.tags} tag${stats.tags === 1 ? "" : "s"}`
-          : ""}
+        <span>
+          {stats
+            ? `${stats.notes} nota${stats.notes === 1 ? "" : "s"} · ${stats.blocks} bloco${
+                stats.blocks === 1 ? "" : "s"
+              } · ${stats.tags} tag${stats.tags === 1 ? "" : "s"}`
+            : ""}
+        </span>
+        {/* Crédito, em letra miúda: o app é caseiro e o dono é rastreável por aqui. */}
+        <span className="sidebar-credit">
+          criado por{" "}
+          <a href="https://github.com/andrehsilva" target="_blank" rel="noreferrer">
+            github.com/andrehsilva
+          </a>{" "}
+          ·{" "}
+          <a href="https://sacadaweb.com.br" target="_blank" rel="noreferrer">
+            sacadaweb.com.br
+          </a>
+        </span>
       </div>
     </aside>
   );
