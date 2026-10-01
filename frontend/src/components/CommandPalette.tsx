@@ -3,6 +3,7 @@ import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
+import { highlightAuto } from "../lib/highlight";
 import type { SearchHit } from "../lib/types";
 import { Key } from "./ui";
 
@@ -112,7 +113,17 @@ export function CommandPalette({ onClose, onNavigate }: CommandPaletteProps) {
                   </span>
                   <span className="hit-main">
                     <span className="hit-title">{hit.title}</span>
-                    {hit.snippet && <span className="hit-snippet">{hit.snippet}</span>}
+                    {hit.snippet &&
+                      // Bloco de código ganha realce na prévia (linguagem adivinhada): é o que
+                      // deixa reconhecer o snippet sem abrir a nota.
+                      (hit.kind === "block" ? (
+                        <code
+                          className="hit-snippet hljs"
+                          dangerouslySetInnerHTML={{ __html: highlightAuto(hit.snippet) }}
+                        />
+                      ) : (
+                        <span className="hit-snippet">{hit.snippet}</span>
+                      ))}
                   </span>
                   <span className="hit-kind">{HIT_LABELS[hit.kind]}</span>
                 </button>

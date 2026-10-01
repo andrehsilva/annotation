@@ -69,6 +69,20 @@ for (const [name, language] of Object.entries(REGISTERED)) {
 /** `xml` desenha HTML, mas o seletor chama isso de HTML (e o `html` não existe no highlight.js). */
 const ALIASES: Record<string, string> = { html: "xml", shell: "bash", sh: "bash", toml: "ini" };
 
+/**
+ * O HTML com a linguagem **adivinhada** — para a prévia da busca, onde não há linguagem declarada.
+ *
+ * `highlightAuto` roda todas as linguagens registradas sobre o trecho; é caro para um arquivo e
+ * barato para os ~140 caracteres de um resultado.
+ */
+export function highlightAuto(code: string): string {
+  try {
+    return hljs.highlightAuto(code).value;
+  } catch {
+    return "";
+  }
+}
+
 /** O HTML do código realçado — ou `null` quando não há realce para a linguagem escolhida. */
 export function highlightCode(code: string, language: string): string | null {
   const id = ALIASES[language] ?? language;

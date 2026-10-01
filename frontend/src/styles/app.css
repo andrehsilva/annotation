@@ -1763,15 +1763,42 @@ iframe.element-media {
 /* A visão realçada do bloco de código (quando ele não está em edição). Mesmas classes do
    highlight.js, pintadas com os tokens do tema — nada de CSS do pacote, que é escuro por padrão. */
 .code-view {
-  margin: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
   padding: 12px;
-  overflow-x: auto;
   font-size: 13px;
   line-height: 1.6;
   tab-size: 2;
 }
 
-.code-view code {
+/* A numeração fica parada enquanto o código rola de lado. */
+.code-gutter {
+  flex: none;
+  margin: 0;
+  color: var(--text-muted);
+  opacity: 0.55;
+  text-align: right;
+  user-select: none;
+  font: inherit;
+  line-height: inherit;
+}
+
+.code-body {
+  flex: 1;
+  margin: 0;
+  overflow-x: auto;
+  font: inherit;
+  line-height: inherit;
+}
+
+.code-hint {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.code-body code {
   font-family: inherit;
   white-space: pre;
 }
@@ -2250,6 +2277,16 @@ iframe.element-media {
 
 .hit-title {
   font-size: 13px;
+}
+
+/* A prévia realçada da busca: mesma fonte do código, sem quebrar o alinhamento do resultado. */
+.hit-snippet.hljs {
+  display: block;
+  padding: 0;
+  background: none;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .hit-snippet {

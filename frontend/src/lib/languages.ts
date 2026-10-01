@@ -73,3 +73,27 @@ export const LANGUAGE_LABELS: Record<string, string> = {
 export function languageLabel(language: string): string {
   return LANGUAGE_LABELS[language] ?? (language || "sem linguagem");
 }
+
+/**
+ * Chuta a linguagem pelo começo do snippet, para o bloco novo não nascer sem realce.
+ *
+ * É palpite curto e conservador de propósito: só devolve algo quando o padrão é inequívoco (o
+ * `{ "chave":` do JSON, o `def`/`import` do Python, `</` do HTML…). Errou? O seletor ao lado corrige,
+ * e a escolha manual nunca é sobrescrita — isto só preenche quando ainda está vazio.
+ */
+export function guessLanguage(code: string): string | null {
+  const text = code.trimStart();
+  if (!text) return null;
+  const first = text.split("\n", 1)[0] ?? "";
+  if (/^[{[]/.test(text) && /"\s*:/.test(text)) return "json";
+  if (/^<(!doctype|html|div|span|p|head|body|section|a\s)/i.test(text) || /<\/\w+>/.test(text)) {
+    return "html";
+  }
+  if (/^(def |class |import |from \w+ import|@\w+)/.test(text)) return "python";
+  if (/^(SELECT|INSERT INTO|UPDATE|DELETE FROM|CREATE TABLE)\b/i.test(text)) return "sql";
+  if (/^(# |## |- |\* |\d+\. )/.test(text)) return "markdown";
+  if (/^(function |const |let |var |import .* from|export |console\.log)/.test(text)) return "javascript";
+  if (/^\s*[.#]?[\w-]+\s*\{[^}]*:[^}]*;/.test(first + text)) return "css";
+  if (/^(\$ |#!\/|sudo |npm |yarn |pnpm |git |docker )/.test(text)) return "bash";
+  return null;
+}

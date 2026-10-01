@@ -14,7 +14,7 @@ import { api } from "../lib/api";
 import { KIND_ICONS } from "../lib/kinds";
 import { KIND_LABELS, hostOf, isForeignBlock, vimeoId, youtubeId } from "../lib/format";
 import { highlightCode } from "../lib/highlight";
-import { LANGUAGES, LANGUAGE_PRIORITY, languageLabel } from "../lib/languages";
+import { LANGUAGES, LANGUAGE_PRIORITY, guessLanguage, languageLabel } from "../lib/languages";
 import type { Block } from "../lib/types";
 import type { ImagePreview } from "./ImageModal";
 import type { PdfPreview } from "./PdfModal";
@@ -34,6 +34,8 @@ interface BlockCardProps {
   dragging: boolean;
   highlighted: boolean;
   onActivate: () => void;
+  /** Sai do modo de edição do bloco (o código volta à visão realçada). */
+  onDeactivate: () => void;
   onPatch: (patch: Partial<Block>) => void;
   onDelete: () => void;
   onRegisterRef: (element: HTMLElement | null) => void;
@@ -55,6 +57,7 @@ export function BlockCard({
   dragging,
   highlighted,
   onActivate,
+  onDeactivate,
   onPatch,
   onDelete,
   onRegisterRef,
@@ -78,9 +81,21 @@ export function BlockCard({
     return [...priority, ...LANGUAGES.filter((language) => !priority.includes(language)).sort()];
   }, []);
   /** O realce só custa quando o bloco não está em edição — e o texto já sai escapado do hljs. */
+  /**
+   * A linguagem que a tela mostra: a escolhida no seletor ou, quando ninguém escolheu nada, o palpite
+   * do conteúdo (o seletor diz "detectar" nesse caso). O palpite vale só para exibir — gravar é papel
+   * de quem escolhe, para o markdown exportado não sair com uma linguagem que ninguém confirmou.
+   */
+  const shownLanguage = block.language || guessLanguage(block.text) || "";
   const highlightedHtml = useMemo(
-    () => (block.type === "code" && !active ? highlightCode(block.text, block.language) : null),
-    [active, block.language, block.text, block.type],
+    () => (block.type === "code" && !active ? highlightCode(block.text, shownLanguage) : null),
+    [active, block.text, block.type, shownLanguage],
+  );
+
+  const lineCount = block.text ? block.text.replace(/\n$/, "").split("\n").length : 0;
+  const lineNumbers = useMemo(
+    () => Array.from({ length: Math.max(lineCount, 1) }, (_, index) => index + 1).join("\n"),
+    [lineCount],
   );
 
   const copyCode = async () => {
@@ -207,11 +222,12 @@ export function BlockCard({
             <div className="code-toolbar">
               <select
                 className="lang-input"
-                value={block.language}
+                value={shownLanguage}
                 disabled={foreign}
                 aria-label="Linguagem do bloco"
                 onChange={(event) => onPatch({ language: event.target.value })}
               >
+                <option value="">detectar</option>
                 {block.language && !orderedLanguages.includes(block.language) && (
                   <option value={block.language}>{languageLabel(block.language)}</option>
                 )}
@@ -222,15 +238,20 @@ export function BlockCard({
                 ))}
               </select>
               {block.text.trim() && (
-                <button
-                  type="button"
-                  className="icon-btn is-tiny"
-                  onClick={() => void copyCode()}
-                  title="Copiar o código"
-                  aria-label="Copiar o código"
-                >
-                  {copied ? <Check size={13} weight="bold" /> : <CopySimple size={13} weight="bold" />}
-                </button>
+                <>
+                  <span className="code-hint">
+                    {lineCount} {lineCount === 1 ? "linha" : "linhas"}
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-btn is-tiny"
+                    onClick={() => void copyCode()}
+                    title="Copiar o código"
+                    aria-label="Copiar o código"
+                  >
+                    {copied ? <Check size={13} weight="bold" /> : <CopySimple size={13} weight="bold" />}
+                  </button>
+                </>
               )}
             </div>
             {active ? (
@@ -245,29 +266,63 @@ export function BlockCard({
                 spellCheck={false}
                 wrap="off"
                 placeholder="// cole o snippet aqui"
-                onChange={(event) => onPatch({ text: event.target.value })}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  // Sem linguagem escolhida, o próprio conteúdo dá o palpite (o seletor corrige).
+                  const guessed = block.language ? null : guessLanguage(next);
+                  onPatch(guessed ? { text: next, language: guessed } : { text: next });
+                }}
                 onKeyDown={(event) => {
-                  // Tab indenta em vez de sair do bloco: dentro de um snippet isso é o esperado.
-                  if (event.key !== "Tab" || foreign) return;
-                  event.preventDefault();
                   const area = event.currentTarget;
                   const { selectionStart, selectionEnd, value } = area;
-                  const next = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`;
-                  onPatch({ text: next });
-                  window.requestAnimationFrame(() => {
-                    area.selectionStart = area.selectionEnd = selectionStart + 2;
-                  });
+                  const put = (text: string, caret: number) => {
+                    onPatch({ text });
+                    window.requestAnimationFrame(() => {
+                      area.selectionStart = area.selectionEnd = caret;
+                    });
+                  };
+                  // Esc e Ctrl+E saem da edição: o bloco volta à visão realçada.
+                  if (event.key === "Escape" || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e")) {
+                    event.preventDefault();
+                    area.blur();
+                    onDeactivate();
+                    return;
+                  }
+                  if (foreign) return;
+                  // Tab indenta em vez de sair do bloco: dentro de um snippet isso é o esperado.
+                  if (event.key === "Tab") {
+                    event.preventDefault();
+                    put(`${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`, selectionStart + 2);
+                    return;
+                  }
+                  // Enter mantém a indentação da linha e abre dois espaços depois de `:` e `{`.
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+                    const line = value.slice(lineStart, selectionStart);
+                    const indent = /^\s*/.exec(line)?.[0] ?? "";
+                    const extra = /[:{([]\s*$/.test(line) ? "  " : "";
+                    put(
+                      `${value.slice(0, selectionStart)}\n${indent}${extra}${value.slice(selectionEnd)}`,
+                      selectionStart + 1 + indent.length + extra.length,
+                    );
+                  }
                 }}
                 rows={3}
               />
             ) : (
-              <pre className={highlightedHtml ? "code-view hljs" : "code-view"} tabIndex={0}>
-                {highlightedHtml ? (
-                  <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
-                ) : (
-                  <code>{block.text}</code>
-                )}
-              </pre>
+              <div className="code-view" onMouseDown={onActivate} onFocusCapture={onActivate}>
+                <pre className="code-gutter" aria-hidden="true">
+                  {lineNumbers}
+                </pre>
+                <pre className={highlightedHtml ? "code-body hljs" : "code-body"} tabIndex={0}>
+                  {highlightedHtml ? (
+                    <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+                  ) : (
+                    <code>{block.text}</code>
+                  )}
+                </pre>
+              </div>
             )}
           </div>
         )}

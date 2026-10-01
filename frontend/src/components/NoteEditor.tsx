@@ -625,6 +625,7 @@ export function NoteEditor({
               dragging={block.id === draggingId}
               highlighted={block.id === highlightId}
               onActivate={() => setActiveId(block.id)}
+              onDeactivate={() => setActiveId(0)}
               onPatch={(changes) => patch(block.id, changes)}
               onDelete={() => void remove(block.id)}
               onRegisterRef={(element) => {
