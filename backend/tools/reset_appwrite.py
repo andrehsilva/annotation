@@ -39,8 +39,7 @@ TABLES = (
     "tags",
     "media_files",
     "events",
-    "drive_files",
-    "drive_state",
+    "gist_files",
     "sessions",
     "users",
     "counters",
@@ -48,9 +47,19 @@ TABLES = (
 )
 
 
-def snapshot() -> dict[str, int]:
+def existing() -> set[str]:
+    """As tabelas que existem na instância.
+
+    O schema é a fonte da verdade, mas a instância pode estar atrás (ou à frente) dele: sem esta
+    checagem, uma tabela que não existe derruba o `count` e a limpeza nem começa.
+    """
+    rows = store().tables.list_tables(DATABASE_ID).get("tables", [])
+    return {row.get("$id") or row.get("id") for row in rows}
+
+
+def snapshot(tables: set[str]) -> dict[str, int]:
     s = store()
-    return {table: s.count(table) for table in TABLES}
+    return {table: s.count(table) for table in TABLES if table in tables}
 
 
 def show(title: str, counts: dict[str, int], arquivos: list[str]) -> None:
@@ -63,14 +72,18 @@ def show(title: str, counts: dict[str, int], arquivos: list[str]) -> None:
 
 def wipe(apply: bool) -> tuple[dict[str, int], list[str]]:
     s = store()
-    antes = snapshot()
+    aqui = existing()
+    faltando = [table for table in TABLES if table not in aqui]
+    antes = snapshot(aqui)
     arquivos = [f["$id"] for f in s.storage.list_files(BUCKET_ID).get("files", [])]
     show("antes", antes, arquivos)
+    if faltando:
+        print(f"[reset] fora da instância (nada a apagar): {', '.join(faltando)}")
     if not apply:
         print("[reset] dry-run: nada foi apagado")
         return antes, arquivos
 
-    for table in TABLES:
+    for table in [name for name in TABLES if name in aqui]:
         removidas = s.delete_where(table, [])
         if removidas:
             print(f"    - {table:<18} {removidas} linha(s)")
@@ -80,7 +93,7 @@ def wipe(apply: bool) -> tuple[dict[str, int], list[str]]:
         except Exception as error:  # noqa: BLE001 - arquivo já ausente não é problema
             print(f"    ! arquivo {nome}: {str(error)[:60]}")
     print(f"    - bucket {BUCKET_ID}: {len(arquivos)} arquivo(s) apagado(s)")
-    depois = snapshot()
+    depois = snapshot(aqui)
     if any(depois.values()):
         sys.exit(f"[reset] sobrou linha: {depois}")
     print("[reset] tabelas vazias e contadores zerados (o próximo id de cada família é 1)")
@@ -139,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     ensure_user(args.email, args.password, hash_atual)
-    depois = snapshot()
+    depois = snapshot(existing())
     show("depois", depois, [f["$id"] for f in s.storage.list_files(BUCKET_ID).get("files", [])])
     print("[reset] pronto")
     return 0
