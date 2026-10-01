@@ -1,4 +1,4 @@
-import { Bell, DotsThree, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { Bell, DotsThree, GithubLogo, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -25,6 +25,7 @@ interface TopBarProps {
   onOpenSearch: () => void;
   onToggleSidebar: () => void;
   onOpenAdmin: () => void;
+  onOpenGithub: () => void;
   onOpenWelcome: () => void;
   onLogout: () => void;
   onChangePassword: () => void;
@@ -48,6 +49,7 @@ export function TopBar({
   onOpenSearch,
   onToggleSidebar,
   onOpenAdmin,
+  onOpenGithub,
   onOpenWelcome,
   onLogout,
   onChangePassword,
@@ -392,6 +394,18 @@ export function TopBar({
                   Admin: usuários e grupos
                 </button>
               )}
+              <button
+                type="button"
+                role="menuitem"
+                className="user-popover-item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenGithub();
+                }}
+              >
+                <GithubLogo size={14} weight="bold" />
+                GitHub: publicar como gist
+              </button>
               <span className="user-popover-sep" aria-hidden="true" />
               <button
                 type="button"

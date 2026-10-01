@@ -91,6 +91,8 @@ def user(row: dict[str, Any]) -> dict[str, Any]:
         "last_login_at": parse_dt(row.get("last_login_at")),
         "activity_seen_at": parse_dt(row.get("activity_seen_at")),
         "welcome_seen_at": parse_dt(row.get("welcome_seen_at")),
+        # Segredo de servidor: fica na linha para as rotas do GitHub usarem, e `UserOut` não o expõe.
+        "github_token": row.get("github_token") or "",
     }
 
 
@@ -232,6 +234,18 @@ def note_tag(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def gist_file(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "row_id": row["$id"],
+        "user_id": to_int(row.get("user_id")),
+        "note_id": to_int(row.get("note_id")),
+        "gist_id": row.get("gist_id") or "",
+        "gist_url": row.get("gist_url") or "",
+        "checksum": row.get("checksum") or "",
+        "published_at": parse_dt(row.get("published_at")),
+    }
+
+
 NORMALIZE = {
     "users": user,
     "sessions": session,
@@ -246,6 +260,7 @@ NORMALIZE = {
     "block_links": link,
     "note_tags": note_tag,
     "media_files": media,
+    "gist_files": gist_file,
     "events": event,
 }
 

@@ -19,6 +19,7 @@ from .routers import (
     auth,
     blocks,
     events,
+    github,
     groups,
     media,
     notes,
@@ -68,6 +69,7 @@ app.include_router(media.files_router)
 app.include_router(search.router)
 app.include_router(relations.router)
 app.include_router(events.router)
+app.include_router(github.router)
 app.include_router(groups.router)
 
 

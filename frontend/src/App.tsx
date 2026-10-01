@@ -5,6 +5,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import type { ConfirmRequest } from "./components/ConfirmDialog";
 import { KindView } from "./components/KindView";
+import { GithubPanel } from "./components/GithubPanel";
 import { ImageModal } from "./components/ImageModal";
 import type { ImagePreview } from "./components/ImageModal";
 import { LoginView } from "./components/LoginView";
@@ -63,6 +64,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
@@ -117,6 +119,7 @@ export default function App() {
     setPdf(null);
     setSearchOpen(false);
     setShortcutsOpen(false);
+    setGithubOpen(false);
     setReady(false);
   }, []);
 
@@ -531,6 +534,7 @@ export default function App() {
         onOpenSearch={() => setSearchOpen(true)}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
         onOpenAdmin={() => setView({ kind: "admin" })}
+        onOpenGithub={() => setGithubOpen(true)}
         onOpenWelcome={() => setView({ kind: "welcome" })}
         onLogout={() => void logout()}
         onChangePassword={() => setPasswordOpen(true)}
@@ -561,6 +565,9 @@ export default function App() {
         <CommandPalette onClose={() => setSearchOpen(false)} onNavigate={(hit) => void navigateHit(hit)} />
       )}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {githubOpen && (
+        <GithubPanel onClose={() => setGithubOpen(false)} onError={report} onNotify={notify} />
+      )}
       {passwordOpen && (
         <PasswordPanel onClose={() => setPasswordOpen(false)} onNotify={notify} />
       )}

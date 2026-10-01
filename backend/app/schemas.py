@@ -277,6 +277,20 @@ class Stats(BaseModel):
     counts: dict[str, int]
 
 
+class GithubStatus(BaseModel):
+    """O estado da publicação: se há token salvo e o link do que já saiu."""
+
+    connected: bool
+    published: list[dict] = []
+
+
+class GistOut(BaseModel):
+    """O link do gist da nota; `updated` diz se ele já existia (foi atualizado, não criado)."""
+
+    url: str
+    updated: bool
+
+
 class EventOut(ORMModel):
     id: int
     action: str

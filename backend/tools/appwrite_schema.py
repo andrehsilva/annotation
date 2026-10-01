@@ -133,6 +133,9 @@ TABLE_SPECS: list[dict[str, Any]] = [
             col("activity_seen_at", "datetime"),
             # Nulo = a introdução do primeiro login ainda não foi dispensada, e ela abre no login.
             col("welcome_seen_at", "datetime"),
+            # Token pessoal do GitHub (escopo `gist`), de quem publica: linha de servidor, nunca
+            # serializada para o cliente — `UserOut` não tem este campo de propósito.
+            col("github_token", "string", size=200),
         ],
         "indexes": [{"key": "uq_users_email", "type": "unique", "columns": ["email"]}],
     },
@@ -259,6 +262,21 @@ TABLE_SPECS: list[dict[str, Any]] = [
             {"key": "idx_note_groups_note", "type": "key", "columns": ["note_id"]},
             {"key": "idx_note_groups_group", "type": "key", "columns": ["group_id"]},
         ],
+    },
+    {
+        "id": "gist_files",
+        "name": "Notas publicadas como gist",
+        # rowId = "<user_id>_<note_id>": é ele que diz o que já está publicado no GitHub daquela
+        # conta (o gist é de quem publicou, e a nota pode ser compartilhada com mais gente).
+        "columns": [
+            col("user_id", "string", True, 36),
+            col("note_id", "string", True, 36),
+            col("gist_id", "string", True, 64),
+            col("gist_url", "string", size=300),
+            col("checksum", "string", size=64),
+            col("published_at", "datetime"),
+        ],
+        "indexes": [{"key": "idx_gist_files_user", "type": "key", "columns": ["user_id"]}],
     },
     {
         "id": "note_tags",

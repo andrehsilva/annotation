@@ -1,4 +1,4 @@
-import { ArrowsDownUp, ArrowLeft, Trash, UsersThree } from "@phosphor-icons/react";
+import { ArrowUpRight, ArrowsDownUp, ArrowLeft, GithubLogo, Trash, UsersThree } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../lib/api";
@@ -62,6 +62,8 @@ export function NoteEditor({
   const [kindMenuFor, setKindMenuFor] = useState<number | null>(null);
   const [title, setTitle] = useState(note.title);
   const [shareOpen, setShareOpen] = useState(false);
+  const [gistUrl, setGistUrl] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
   // A nota pode ser de outra conta (chegou por grupo): só o dono apaga, e quem só lê não escreve —
   // a tela não oferece o que a API nega.
   const isOwner = note.role === "owner";
@@ -112,6 +114,21 @@ export function NoteEditor({
   /** Blocks in the order they are drawn: the note's own order, or newest on top. */
   const shown = newestFirst ? [...blocks].reverse() : blocks;
   const positionOf = new Map(blocks.map((block, index) => [block.id, index]));
+
+  // O gist da nota, se ela já foi publicada: o botão vira "abrir" e o link fica à mão.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .githubStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setGistUrl(status.published.find((entry) => entry.note_id === note.id)?.url ?? null);
+      })
+      .catch(() => undefined); // sem token, ou API fora: o botão de publicar continua ali
+    return () => {
+      cancelled = true;
+    };
+  }, [note.id]);
 
   // Reset only when another note (or another anchor) is opened; refetches must not clobber typing.
   useEffect(() => {
@@ -330,6 +347,26 @@ export function NoteEditor({
     await insertAfter(block, kind);
   };
 
+  /**
+   * Publica (ou atualiza) o gist desta nota. O GitHub só responde a quem tem token salvo — sem ele o
+   * painel do GitHub explica o caminho, e o erro aparece no toast.
+   */
+  const publish = async () => {
+    setPublishing(true);
+    try {
+      const result = await api.publishGist(note.id);
+      setGistUrl(result.url);
+      onNotify(
+        result.updated ? "Gist atualizado no GitHub" : "Nota publicada como gist (secreto)",
+        "success",
+      );
+    } catch (error) {
+      onError(error);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const continueWriting = async () => {
     const last = blocksRef.current.at(-1);
     if (!last) {
@@ -453,6 +490,9 @@ export function NoteEditor({
       const altEnter = event.altKey && !event.shiftKey;
       if ((plainEnter && active.type !== "code") || altEnter) {
         event.preventDefault();
+        // Bloco vazio não gera outro bloco vazio: escreva neste, ou troque o tipo com `/`. Bloco de
+        // outra conta é a exceção — não dá para escrever nele, então o novo é o caminho para seguir.
+        if (isBlank(active) && !isForeignBlock(active)) return;
         void insertAfter(active, active.type);
         return;
       }
@@ -533,6 +573,30 @@ export function NoteEditor({
           </span>
           <span>atualizado {relativeTime(note.updated_at)}</span>
           <span className="note-meta-actions">
+            {isOwner && (
+              <button
+                type="button"
+                className="icon-btn"
+                disabled={publishing}
+                onClick={() => void publish()}
+                title={gistUrl ? "Atualizar o gist desta nota" : "Publicar esta nota como gist"}
+                aria-label={gistUrl ? "Atualizar o gist" : "Publicar como gist"}
+              >
+                <GithubLogo size={15} weight="bold" />
+              </button>
+            )}
+            {gistUrl && (
+              <a
+                className="icon-btn"
+                href={gistUrl}
+                target="_blank"
+                rel="noreferrer"
+                title="Abrir o gist no GitHub"
+                aria-label="Abrir o gist"
+              >
+                <ArrowUpRight size={15} weight="bold" />
+              </a>
+            )}
             {isOwner && (
               <button
                 type="button"

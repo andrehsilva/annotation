@@ -135,6 +135,18 @@ export interface MediaUpload {
   size: number;
 }
 
+/** Uma nota já publicada como gist: o id dela aqui e o link no GitHub. */
+export interface PublishedGist {
+  note_id: number;
+  url: string;
+}
+
+/** O estado da publicação: se há token salvo e o que já saiu daqui. */
+export interface GithubStatus {
+  connected: boolean;
+  published: PublishedGist[];
+}
+
 export type Role = "admin" | "user";
 
 /** Papel de uma conta dentro de uma nota: quem só lê, quem escreve, e o dono. */

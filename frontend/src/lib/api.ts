@@ -4,6 +4,7 @@ import type {
   BlockListItem,
   BlockType,
   EventFeed,
+  GithubStatus,
   Group,
   GroupDetail,
   MediaUpload,
@@ -152,6 +153,15 @@ export const api = {
     body.append("file", file);
     return request<MediaUpload>("/api/media", { method: "POST", body });
   },
+
+  githubStatus: () => request<GithubStatus>("/api/github/status"),
+  githubSetToken: (token: string) =>
+    request<GithubStatus>("/api/github/token", { method: "PUT", ...json({ token }) }),
+  githubForgetToken: () => request<GithubStatus>("/api/github/token", { method: "DELETE" }),
+  publishGist: (noteId: number) =>
+    request<{ url: string; updated: boolean }>(`/api/github/notes/${noteId}`, { method: "POST" }),
+  unpublishGist: (noteId: number) =>
+    request<void>(`/api/github/notes/${noteId}`, { method: "DELETE" }),
 
   search: (query: string) =>
     request<SearchResults>(`/api/search?q=${encodeURIComponent(query)}`),
