@@ -67,7 +67,7 @@ export function Sidebar({
           className="input"
           value={filter}
           onChange={(event) => onFilter(event.target.value)}
-          placeholder="Filtrar..."
+          placeholder="Filtrar…"
           aria-label="Filtrar notas"
         />
       </div>

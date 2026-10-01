@@ -348,6 +348,7 @@ textarea {
   background: var(--surface-raised);
   color: var(--text-muted);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Criar caderno/nota no cabeçalho, colados no chip do usuário: a folga de 28px antes do grupo e a
@@ -600,6 +601,7 @@ textarea {
   border-radius: var(--radius-full);
   color: var(--text);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .note-counts.is-large {
@@ -980,6 +982,7 @@ iframe.element-media {
   background: var(--bg);
   color: var(--text-muted);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .icon-btn.is-danger:hover {
@@ -1466,6 +1469,13 @@ iframe.element-media {
 
 .note-title-input:focus {
   outline: none;
+}
+
+/* O título é o primeiro alvo do teclado na nota: o foco precisa aparecer sem empurrar o texto. */
+.note-title-input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .block-list {
@@ -2236,6 +2246,10 @@ iframe.element-media {
   outline: none;
 }
 
+.modal-head:focus-within {
+  border-bottom-color: var(--primary);
+}
+
 .modal-list {
   display: flex;
   flex-direction: column;
@@ -2546,6 +2560,23 @@ iframe.element-media {
 .toast-message {
   flex: 1;
   min-width: 0;
+}
+
+.toast-action {
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 2px 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .toast-close {

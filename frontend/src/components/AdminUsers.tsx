@@ -191,7 +191,7 @@ export function AdminUsers({ user, onError, onNotify, onAskConfirm }: AdminUsers
             </select>
           </label>
           <button type="submit" className="btn btn-primary" disabled={creating}>
-            {creating ? "Criando..." : "Criar usuário"}
+            {creating ? "Criando…" : "Criar usuário"}
           </button>
         </form>
         {formError && (
@@ -207,7 +207,7 @@ export function AdminUsers({ user, onError, onNotify, onAskConfirm }: AdminUsers
 
       <section className="panel admin-table-shell">
         {users === null ? (
-          <p className="panel-hint">Carregando usuários...</p>
+          <p className="panel-hint">Carregando usuários…</p>
         ) : (
           <table className="admin-table">
             <thead>

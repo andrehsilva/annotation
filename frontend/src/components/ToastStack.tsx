@@ -7,6 +7,8 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
+  /** O que ainda dá para fazer enquanto o aviso está na tela — hoje só o desfazer do bloco. */
+  action?: { label: string; run: () => void };
 }
 
 const TOAST_ICONS: Record<ToastKind, Icon> = {
@@ -30,6 +32,18 @@ export function ToastStack({ toasts, onDismiss }: ToastStackProps) {
           <div className={`toast is-${toast.kind}`} key={toast.id}>
             <ToastIcon size={15} weight="bold" className="toast-icon" />
             <span className="toast-message">{toast.message}</span>
+            {toast.action && (
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  toast.action?.run();
+                  onDismiss(toast.id);
+                }}
+              >
+                {toast.action.label}
+              </button>
+            )}
             <button
               type="button"
               className="toast-close"

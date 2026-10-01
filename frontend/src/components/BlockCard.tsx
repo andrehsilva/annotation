@@ -373,7 +373,7 @@ export function BlockCard({
               ref={(element) => onRegisterRef(element)}
               className="input"
               value={block.url}
-              placeholder="https://..."
+              placeholder="https://…"
               autoFocus
               onChange={(event) => onPatch({ url: event.target.value })}
               onBlur={() => setEditingLink(false)}
@@ -401,7 +401,7 @@ export function BlockCard({
               {!foreign && (
                 <label className="btn btn-ghost btn-file">
                   <UploadSimple size={15} />
-                  {uploading ? "enviando..." : "arquivo"}
+                  {uploading ? "enviando…" : "arquivo"}
                   <input
                     type="file"
                     accept={block.type === "image" ? "image/*" : "video/*"}
@@ -427,7 +427,12 @@ export function BlockCard({
                   }
                   title="Abrir no tamanho real"
                 >
-                  <img src={block.url} alt={block.caption || "imagem da nota"} />
+                  <img
+                    src={block.url}
+                    alt={block.caption || "imagem da nota"}
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </button>
                 {block.caption && <figcaption>{block.caption}</figcaption>}
               </figure>
@@ -470,7 +475,7 @@ export function BlockCard({
               {!foreign && (
                 <label className="btn btn-ghost btn-file">
                   <UploadSimple size={15} />
-                  {uploading ? "enviando..." : "arquivo"}
+                  {uploading ? "enviando…" : "arquivo"}
                   <input
                     type="file"
                     accept="application/pdf"

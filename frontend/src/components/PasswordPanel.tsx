@@ -127,7 +127,7 @@ export function PasswordPanel({ onClose, onNotify }: PasswordPanelProps) {
             Cancelar
           </button>
           <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? "Salvando..." : "Trocar senha"}
+            {busy ? "Salvando…" : "Trocar senha"}
           </button>
         </div>
       </form>

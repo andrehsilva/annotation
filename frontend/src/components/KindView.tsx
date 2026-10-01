@@ -46,7 +46,7 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onOpenPdf, onErro
     };
   }, [blockType, onError]);
 
-  if (items === null) return <Spinner label={`Carregando ${KIND_LABELS[blockType]}...`} />;
+  if (items === null) return <Spinner label={`Carregando ${KIND_LABELS[blockType]}…`} />;
 
   const grid = blockType === "image" || blockType === "video";
   const openNote = (item: BlockListItem) => onOpenNote(item.note_id, item.id);
@@ -143,7 +143,13 @@ export function KindView({ blockType, onOpenNote, onOpenImage, onOpenPdf, onErro
                     }
                     title="Abrir no tamanho real"
                   >
-                    <img className="element-media" src={video} alt={item.caption || item.note_title} />
+                    <img
+                      className="element-media"
+                      src={video}
+                      alt={item.caption || item.note_title}
+                      loading="lazy"
+                      decoding="async"
+                    />
                   </button>
                 ) : blockType === "video" ? (
                   <div className="element-body">

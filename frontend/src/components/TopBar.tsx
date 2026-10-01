@@ -96,7 +96,12 @@ export function TopBar({
   // Cabeçalho estreito: a régua invisível (as mesmas peças fora da tela) diz a largura de cada grupo, e
   // a conta decide o arranjo — tudo inline, só os contadores no menu "…", ou o menu com tudo.
   const [layout, setLayout] = useState<"full" | "counters" | "menu">("full");
-  const [visibleKinds, setVisibleKinds] = useState(KIND_ORDER.length);
+  /**
+   * Contador de tipo só entra na régua se houver o que contar: sete zeros não informam nada e
+   * empurram para fora o que informa. Tipo sem bloco nenhum continua alcançável pelo menu "…".
+   */
+  const presentKinds = KIND_ORDER.filter((kind) => (stats?.counts[kind] ?? 0) > 0);
+  const [visibleKinds, setVisibleKinds] = useState(presentKinds.length);
   const [moreOpen, setMoreOpen] = useState(false);
   /** Onde ancorar o menu: o popover é `fixed` porque o `.topnav` recorta o que passa dele. */
   const [moreBox, setMoreBox] = useState<{ top: number; right: number } | null>(null);
@@ -119,7 +124,7 @@ export function TopBar({
       const total = sectionsWidth + chips.reduce((sum, chip) => sum + widthOf(chip), 0);
       if (total <= room) {
         setLayout("full");
-        setVisibleKinds(KIND_ORDER.length);
+        setVisibleKinds(presentKinds.length);
         return;
       }
       const counterRoom = room - sectionsWidth - moreWidth;
@@ -142,7 +147,7 @@ export function TopBar({
       observer.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [stats]);
+  }, [stats, presentKinds.length]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -167,7 +172,6 @@ export function TopBar({
     const isActive = view.kind === "kind" && view.blockType === kind;
     const classes = ["topnav-chip"];
     if (isActive) classes.push("is-active");
-    if (total === 0) classes.push("is-zero");
     return (
       <button
         type="button"
@@ -263,7 +267,7 @@ export function TopBar({
         {/* Régua: as mesmas peças, fora de vista, para medir sem depender do que está na tela. */}
         <div className="topnav-ruler" ref={rulerRef} aria-hidden="true">
           <div className="topnav-sections">{sections.map((section) => sectionChip(section, true))}</div>
-          {KIND_ORDER.map((kind) => kindChip(kind, true))}
+          {presentKinds.map((kind) => kindChip(kind, true))}
           <span className="topnav-chip">
             <DotsThree size={16} weight="bold" />
           </span>
@@ -272,13 +276,15 @@ export function TopBar({
         {stats && layout !== "menu" && (
           <div className="topnav-sections">
             {sections.map((section) => sectionChip(section))}
-            <span className="topnav-pipe" aria-hidden="true">
-              |
-            </span>
+            {presentKinds.length > 0 && (
+              <span className="topnav-pipe" aria-hidden="true">
+                |
+              </span>
+            )}
           </div>
         )}
 
-        {stats && layout !== "menu" && KIND_ORDER.slice(0, visibleKinds).map((kind) => kindChip(kind))}
+        {stats && layout !== "menu" && presentKinds.slice(0, visibleKinds).map((kind) => kindChip(kind))}
 
         {stats && layout !== "full" && (
           <div className="topnav-more" ref={moreRef}>
@@ -323,8 +329,10 @@ export function TopBar({
                       </button>
                     );
                   })}
-                {layout === "menu" && <span className="topnav-menu-sep" aria-hidden="true" />}
-                {KIND_ORDER.slice(layout === "menu" ? 0 : visibleKinds).map((kind) => {
+                {layout === "menu" && presentKinds.length > 0 && (
+                  <span className="topnav-menu-sep" aria-hidden="true" />
+                )}
+                {presentKinds.slice(layout === "menu" ? 0 : visibleKinds).map((kind) => {
                   const KindIcon = KIND_ICONS[kind];
                   const total = stats.counts[kind];
                   return (

@@ -57,7 +57,7 @@ export function MentionPalette({
         ref={inputRef}
         className="palette-input"
         value={query}
-        placeholder="título da nota..."
+        placeholder="título da nota…"
         onChange={(event) => {
           setQuery(event.target.value);
           setCursor(0);

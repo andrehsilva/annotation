@@ -79,7 +79,7 @@ export function LoginView({ onLoggedIn }: LoginViewProps) {
         )}
 
         <button type="submit" className="btn btn-primary" disabled={busy}>
-          {busy ? "Entrando..." : "Entrar"}
+          {busy ? "Entrando…" : "Entrar"}
         </button>
       </form>
     </div>

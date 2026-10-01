@@ -74,7 +74,7 @@ export function CommandPalette({ onClose, onNavigate }: CommandPaletteProps) {
             ref={inputRef}
             className="modal-input"
             value={query}
-            placeholder="Buscar notas, blocos e tags..."
+            placeholder="Buscar notas, blocos e tags…"
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") onClose();

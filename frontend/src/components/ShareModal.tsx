@@ -91,7 +91,7 @@ export function ShareModal({ note, onClose, onChanged, onError, onNotify }: Shar
         </div>
 
         {sharing === null ? (
-          <p className="panel-hint">Carregando quem alcança esta nota...</p>
+          <p className="panel-hint">Carregando quem alcança esta nota…</p>
         ) : (
           <>
             <p className="panel-hint">

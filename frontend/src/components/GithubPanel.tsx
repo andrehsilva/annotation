@@ -98,7 +98,7 @@ export function GithubPanel({ onClose, onError, onNotify }: GithubPanelProps) {
         </div>
 
         {status === null ? (
-          <p className="panel-hint">Carregando...</p>
+          <p className="panel-hint">Carregando…</p>
         ) : status.connected ? (
           <>
             <p className="panel-hint">

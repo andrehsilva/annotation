@@ -16,12 +16,15 @@ import { ShareBadge } from "./ShareBadge";
 import { ShareModal } from "./ShareModal";
 import { TagPalette } from "./TagPalette";
 import { TagRow } from "./TagRow";
-import type { ToastKind } from "./ToastStack";
+import type { Toast, ToastKind } from "./ToastStack";
 import { Key } from "./ui";
 
 const SAVE_DELAY = 700;
 const PICKER_LIMIT = 300;
 const ORDER_KEY = "notai-note-order";
+
+/** O que o aviso oferece: o rótulo do botão e o que ele faz. */
+type ToastAction = NonNullable<Toast["action"]>;
 
 interface NoteEditorProps {
   note: Note;
@@ -34,7 +37,7 @@ interface NoteEditorProps {
   onToggleTag: (tagId: number, attached: boolean) => void | Promise<void>;
   onRenameNote: (title: string) => void | Promise<void>;
   onDeleteNote: () => void;
-  onNotify: (message: string, kind?: ToastKind) => void;
+  onNotify: (message: string, kind?: ToastKind, action?: ToastAction) => void;
   onOpenImage: (image: ImagePreview) => void;
   onOpenPdf: (pdf: PdfPreview) => void;
   onError: (error: unknown) => void;
@@ -62,6 +65,12 @@ export function NoteEditor({
   const [kindMenuFor, setKindMenuFor] = useState<number | null>(null);
   const [title, setTitle] = useState(note.title);
   const [shareOpen, setShareOpen] = useState(false);
+  /** O bloco ativo em ref: o prune roda em callback e não pode apagar o que está em edição. */
+  const activeRef = useRef<number>(activeId);
+  /** Fila das limpezas de bloco vazio — ver `pruneBlocks`. */
+  const pruneChain = useRef<Promise<void>>(Promise.resolve());
+  /** Nota que já ganhou o primeiro bloco nesta visita: o efeito pode rodar duas vezes em dev. */
+  const healedRef = useRef<number | null>(null);
   const [gistUrl, setGistUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   // A nota pode ser de outra conta (chegou por grupo): só o dono apaga, e quem só lê não escreve —
@@ -92,6 +101,8 @@ export function NoteEditor({
   changeRef.current = onWorkspaceChange;
   const errorRef = useRef(onError);
   errorRef.current = onError;
+  const notifyRef = useRef(onNotify);
+  notifyRef.current = onNotify;
 
   const loadRelated = useCallback(async () => {
     try {
@@ -130,7 +141,33 @@ export function NoteEditor({
     };
   }, [note.id]);
 
+  // Ao abrir a nota, o que já estava vazio no banco sai (bloco em branco não fica salvo) e uma nota
+  // sem bloco nenhum ganha o primeiro — o editor sempre tem onde escrever.
+  useEffect(() => {
+    if (note.blocks.length === 0) {
+      if (healedRef.current === note.id) return;
+      healedRef.current = note.id;
+      void api
+        .createBlock(note.id, "text")
+        .then(async (created) => {
+          applyLocal([...blocksRef.current, created]);
+          setActiveId(created.id);
+          setFocusId(created.id);
+          await changeRef.current();
+        })
+        .catch((error) => errorRef.current(error));
+      return;
+    }
+    healedRef.current = null;
+    if (note.blocks.length > 1) void pruneEmpty();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando a nota muda
+  }, [note.id]);
+
   // Reset only when another note (or another anchor) is opened; refetches must not clobber typing.
+  useEffect(() => {
+    activeRef.current = activeId;
+  }, [activeId]);
+
   useEffect(() => {
     const anchored =
       anchorBlockId !== null && note.blocks.some((block) => block.id === anchorBlockId)
@@ -187,16 +224,76 @@ export function NoteEditor({
     [],
   );
 
-  // Outgoing saves must not be lost when the view changes.
-  useEffect(() => {
-    const pending = timers.current;
-    return () => {
-      const ids = [...pending.keys()];
-      pending.forEach((timer) => window.clearTimeout(timer));
-      pending.clear();
-      for (const id of ids) void flush(id);
-    };
-  }, [flush]);
+  /** Esquece o save pendente de um bloco: a linha está saindo, o PATCH chegaria tarde. */
+  const cancelPending = (id: number) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timers.current.delete(id);
+    }
+  };
+
+  /**
+   * Bloco vazio não fica salvo.
+   *
+   * Ao sair do bloco (ou da nota) o que não tem conteúdo — texto, url e legenda vazios — é apagado,
+   * porque o banco não é lugar de bloco em branco. A nota nunca fica **sem** bloco nenhum: quando
+   * todos estão vazios, o último fica, e é nele que a próxima escrita entra. Bloco de outra conta
+   * fica de fora: quem apaga o dele é quem escreveu, e o vazio dele não é meu para mexer.
+   */
+  const doPrune = useCallback(
+    async (list: Block[], includeActive: boolean, touchLocal: boolean): Promise<number[]> => {
+    const blanks = list.filter(
+      (block) =>
+        isBlank(block) && !isForeignBlock(block) && (includeActive || block.id !== activeRef.current),
+    );
+    if (blanks.length === 0) return [];
+    const survivors = list.filter((block) => !blanks.includes(block));
+    const doomed = survivors.length > 0 ? blanks : blanks.slice(1);
+    if (doomed.length === 0) return [];
+    doomed.forEach((block) => cancelPending(block.id));
+    try {
+      await Promise.all(doomed.map((block) => api.deleteBlock(block.id)));
+    } catch (error) {
+      errorRef.current(error);
+      return [];
+    }
+    const ids = doomed.map((block) => block.id);
+    if (!touchLocal) {
+      await changeRef.current();
+      return ids;
+    }
+    const gone = new Set(ids);
+    const next = blocksRef.current.filter((block) => !gone.has(block.id));
+    applyLocal(next);
+    if (next.length > 0 && !next.some((block) => block.id === activeRef.current)) {
+      setActiveId(next.at(-1)!.id);
+    }
+    await changeRef.current();
+    return ids;
+    },
+    [],
+  );
+
+  const pruneBlocks = useCallback(
+    (list: Block[], includeActive: boolean, touchLocal: boolean): Promise<number[]> => {
+      // Uma limpeza por vez. Duas em paralelo decidem "fica um" sobre a mesma lista e podem apagar
+      // todos os blocos; enfileiradas, a segunda já enxerga o resultado da primeira.
+      const run = pruneChain.current.then(() => doPrune(list, includeActive, touchLocal));
+      pruneChain.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [doPrune],
+  );
+
+  /** A limpeza do que está na tela: o bloco em edição fica, porque é nele que a escrita continua. */
+  const pruneEmpty = useCallback(
+    (includeActive = false) => pruneBlocks(blocksRef.current, includeActive, true),
+    [pruneBlocks],
+  );
 
   const applyLocal = (next: Block[]) => {
     blocksRef.current = next;
@@ -243,17 +340,73 @@ export function NoteEditor({
     }
   };
 
+  // Sair da nota (ou da tela) leva junto o que ficou vazio no caderno antigo — inclusive o bloco
+  // que estava em edição: ninguém vai escrever nele, e o banco não é lugar de bloco em branco. A
+  // lista é lida aqui dentro, na hora da saída, porque é ela que ainda tem o caderno que está saindo.
+  useEffect(() => {
+    return () => {
+      void pruneBlocks(blocksRef.current, true, false);
+    };
+  }, [note.id, pruneBlocks]);
+
+  // Outgoing saves must not be lost when the view changes.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      const ids = [...pending.keys()];
+      pending.forEach((timer) => window.clearTimeout(timer));
+      pending.clear();
+      for (const id of ids) void flush(id);
+    };
+  }, [flush]);
+
+  /**
+   * Apaga o bloco — e oferece o desfazer no mesmo gesto, que é o que uma ação destrutiva pede:
+   * o aviso guarda o que saiu e onde estava, e devolve no lugar de origem.
+   */
   const remove = async (id: number) => {
     if (blocksRef.current.length <= 1) return;
-    const index = blocksRef.current.findIndex((block) => block.id === id);
-    const previous = blocksRef.current[index - 1] ?? blocksRef.current[index + 1];
+    const list = blocksRef.current;
+    const index = list.findIndex((block) => block.id === id);
+    const block = list[index];
+    const previous = list[index - 1] ?? list[index + 1];
+    const order = list.map((item) => item.id);
+    cancelPending(id);
     try {
       await api.deleteBlock(id);
-      applyLocal(blocksRef.current.filter((block) => block.id !== id));
+      applyLocal(list.filter((item) => item.id !== id));
       if (previous) {
         setActiveId(previous.id);
         setFocusId(previous.id);
       }
+      await changeRef.current();
+      notifyRef.current("Bloco apagado.", "info", { label: "Desfazer", run: () => void restore(block, order) });
+    } catch (error) {
+      errorRef.current(error);
+    }
+  };
+
+  /** Recria o bloco apagado com o mesmo conteúdo, na mesma posição da nota. */
+  const restore = async (block: Block, order: number[]) => {
+    try {
+      const created = await api.createBlock(note.id, block.type);
+      const filled = await api.updateBlock(created.id, {
+        type: block.type,
+        text: block.text,
+        language: block.language,
+        url: block.url,
+        caption: block.caption,
+      });
+      const current = blocksRef.current;
+      // O lugar é o de antes: basta entrar logo antes de quem vinha depois dele (ou no fim, se era
+      // o último). Ancorar no vizinho sobrevivente aguenta bem melhor do que um índice guardado.
+      const heir = current.findIndex((item) => item.id === order[order.indexOf(block.id) + 1]);
+      const next = [...current];
+      next.splice(heir === -1 ? current.length : heir, 0, filled);
+      await api.reorderBlocks(note.id, next.map((item) => item.id));
+      applyLocal(next);
+      setActiveId(filled.id);
+      setFocusId(filled.id);
       await changeRef.current();
     } catch (error) {
       errorRef.current(error);

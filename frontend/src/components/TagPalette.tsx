@@ -57,7 +57,7 @@ export function TagPalette({ all, attachedIds, onPick, onCreate, onClose }: TagP
         ref={inputRef}
         className="palette-input"
         value={query}
-        placeholder="nome da tag..."
+        placeholder="nome da tag…"
         onChange={(event) => {
           setQuery(event.target.value);
           setCursor(0);

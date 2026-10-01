@@ -48,6 +48,8 @@ export type View =
   | { kind: "admin" };
 
 const TOAST_MS: Record<ToastKind, number> = { info: 4000, success: 4000, error: 7000 };
+/** Um aviso com desfazer fica mais tempo: a janela é justamente o tempo de se arrepender. */
+const TOAST_ACTION_MS = 9000;
 
 export default function App() {
   const { theme, setTheme } = useTheme();
@@ -88,10 +90,10 @@ export default function App() {
   }, []);
 
   const notify = useCallback(
-    (message: string, kind: ToastKind = "info") => {
+    (message: string, kind: ToastKind = "info", action?: Toast["action"]) => {
       const id = (toastSeq.current += 1);
-      setToasts((current) => [...current, { id, kind, message }]);
-      window.setTimeout(() => dismissToast(id), TOAST_MS[kind]);
+      setToasts((current) => [...current, { id, kind, message, action }]);
+      window.setTimeout(() => dismissToast(id), action ? TOAST_ACTION_MS : TOAST_MS[kind]);
     },
     [dismissToast],
   );

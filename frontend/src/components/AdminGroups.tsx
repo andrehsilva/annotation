@@ -152,7 +152,7 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
             />
           </label>
           <button type="submit" className="btn btn-primary" disabled={creating || !name.trim()}>
-            {creating ? "Criando..." : "Criar grupo"}
+            {creating ? "Criando…" : "Criar grupo"}
           </button>
         </form>
         {formError && (
@@ -168,7 +168,7 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
 
       <section className="panel admin-table-shell">
         {groups === null ? (
-          <p className="panel-hint">Carregando grupos...</p>
+          <p className="panel-hint">Carregando grupos…</p>
         ) : groups.length === 0 ? (
           <p className="panel-hint">
             <UsersThree size={13} /> Nenhum grupo ainda. Crie o primeiro acima.
@@ -265,7 +265,7 @@ export function AdminGroups({ onError, onNotify, onAskConfirm }: AdminGroupsProp
             <span>Quem está em “{openGroup.name}”</span>
           </p>
           {users === null || memberIds === null ? (
-            <p className="panel-hint">Carregando contas...</p>
+            <p className="panel-hint">Carregando contas…</p>
           ) : (
             <ul className="member-list">
               {users.map((entry) => {
