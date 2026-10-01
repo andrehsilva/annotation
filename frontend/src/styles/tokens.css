@@ -23,6 +23,17 @@
   --ring: rgb(107 165 248 / 25%);
   --shadow: 0 18px 44px rgb(0 0 0 / 45%);
 
+  /* Realce do código (blocos e lista por tipo). Contraste medido sobre o `--code-bg` escuro. */
+  --code-comment: #7d8899;
+  --code-keyword: #c792ea;
+  --code-string: #a5d6a7;
+  --code-number: #f0a45c;
+  --code-title: #82b1ff;
+  --code-attr: #ffcb6b;
+  --code-meta: #6ba5f8;
+  --code-addition: #7fd18a;
+  --code-deletion: #f28b82;
+
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -68,4 +79,15 @@
   --backdrop: rgb(20 22 26 / 45%);
   --ring: rgb(31 111 235 / 16%);
   --shadow: 0 18px 40px rgb(23 30 46 / 12%);
+
+  /* Sobre papel claro o realce pede cores mais fundas, senão some. */
+  --code-comment: #6b7280;
+  --code-keyword: #8250df;
+  --code-string: #0a7b34;
+  --code-number: #b35309;
+  --code-title: #0550ae;
+  --code-attr: #953800;
+  --code-meta: #1f6feb;
+  --code-addition: #1a7f37;
+  --code-deletion: #b42318;
 }

@@ -542,7 +542,6 @@ export default function App() {
         bellOpen={bellOpen}
         onBellOpenChange={changeBell}
         onAllRead={markEventsRead}
-        onNewNote={() => void createNote()}
 
         sidebarOpen={sidebarOpen}
       />

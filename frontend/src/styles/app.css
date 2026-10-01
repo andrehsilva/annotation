@@ -1760,6 +1760,123 @@ iframe.element-media {
   background: var(--bg);
 }
 
+/* A visão realçada do bloco de código (quando ele não está em edição). Mesmas classes do
+   highlight.js, pintadas com os tokens do tema — nada de CSS do pacote, que é escuro por padrão. */
+.code-view {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.code-view code {
+  font-family: inherit;
+  white-space: pre;
+}
+
+.code-view:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-type {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-char,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--code-number);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.hljs-name {
+  color: var(--code-title);
+  font-weight: 600;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-params,
+.hljs-property {
+  color: var(--code-attr);
+}
+
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-doctag {
+  color: var(--code-meta);
+}
+
+.hljs-addition {
+  color: var(--code-addition);
+}
+
+.hljs-deletion {
+  color: var(--code-deletion);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+/* O cartão do link com o botão de editar ao lado. */
+.url-block.is-card {
+  flex-direction: row;
+  align-items: center;
+}
+
+.url-block.is-card .link-card {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.url-block.is-card .link-title {
+  flex: 1;
+}
+
+/* O aviso de bloco de link vazio é clicável: é ele que abre os campos. */
+.panel-hint.is-action {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-hint.is-action:hover {
+  color: var(--primary);
+}
+
 /* A imagem abre por cima da tela; o clique no preview não herda nada de botão. */
 .media-open {
   display: block;

@@ -1,4 +1,4 @@
-import { Bell, DotsThree, GithubLogo, GraphIcon, MagnifyingGlass, Moon, NoteBlank, Plus, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
+import { Bell, DotsThree, GithubLogo, GraphIcon, MagnifyingGlass, Moon, NoteBlank, SidebarSimple, Sun, Tag, User as UserIcon, Users } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -31,7 +31,6 @@ interface TopBarProps {
   onChangePassword: () => void;
   onBellOpenChange: (open: boolean) => void;
   onAllRead: () => void;
-  onNewNote: () => void;
 
   sidebarOpen: boolean;
 }
@@ -55,7 +54,6 @@ export function TopBar({
   onChangePassword,
   onBellOpenChange,
   onAllRead,
-  onNewNote,
 
   sidebarOpen,
 }: TopBarProps) {
@@ -353,17 +351,6 @@ export function TopBar({
       </nav>
 
       <div className="topbar-actions">
-        <div className="topbar-create">
-          <button
-            type="button"
-            className="btn btn-compact create-btn"
-            onClick={onNewNote}
-            title="Nova nota"
-          >
-            <Plus size={13} weight="bold" />
-            <NoteBlank size={16} weight="bold" />
-          </button>
-        </div>
         <span className="topbar-divider" aria-hidden="true" />
         <div className="user-menu" ref={menuRef}>
           <button
