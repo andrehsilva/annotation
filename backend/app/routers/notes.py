@@ -85,7 +85,11 @@ def create_note(
     user: documents.Row = Depends(deps.current_user),
     db: Store = Depends(deps.get_db),
 ) -> NoteOut:
-    """Cria a nota (com o primeiro bloco, no mesmo commit) e já deixa o dono como `owner` dela."""
+    """Cria a nota e já deixa o dono como `owner` dela.
+
+    O primeiro bloco entra no mesmo commit **só quando o texto já vem escrito**: o banco não guarda
+    bloco em branco, e a nota sem bloco abre no editor com a linha em branco da tela.
+    """
     photo = services.snapshot(db, user.id)
     position = max(
         (note.position for note in photo["notes"] if note.owner_id == user.id), default=-1
@@ -107,22 +111,23 @@ def create_note(
             transaction_id=tx,
         )
         acl.add_member(db, note.id, user.id, role="owner")
-        block = documents.write(
-            "blocks",
-            documents.record_id("blocks"),
-            {
-                "note_id": str(note.id),
-                "position": 0,
-                "type": "text",
-                "text": payload.text,
-                "created_by": str(user.id),
-                "created_at": now,
-                "updated_at": now,
-            },
-            owner_id=user.id,
-            transaction_id=tx,
-        )
-        links.reindex_block(db, block, user.id, tx)
+        if payload.text.strip():
+            block = documents.write(
+                "blocks",
+                documents.record_id("blocks"),
+                {
+                    "note_id": str(note.id),
+                    "position": 0,
+                    "type": "text",
+                    "text": payload.text,
+                    "created_by": str(user.id),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                owner_id=user.id,
+                transaction_id=tx,
+            )
+            links.reindex_block(db, block, user.id, tx)
         store().stage(tx, [events.operation(user.id, "created", "note", title, note_id=note.id)])
     return services.note_detail(db, user.id, note)
 

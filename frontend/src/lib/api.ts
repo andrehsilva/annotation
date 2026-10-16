@@ -125,11 +125,11 @@ export const api = {
   deleteRelation: (id: number, relationId: number) =>
     request<NoteRelated>(`/api/notes/${id}/relations/${relationId}`, { method: "DELETE" }),
 
-  createBlock: (noteId: number, type: BlockType, position?: number) =>
-    request<Block>(`/api/notes/${noteId}/blocks`, {
-      method: "POST",
-      ...json({ type, position }),
-    }),
+  /** O bloco nasce com o conteúdo que já existe: rascunho sem conteúdo não vira linha no banco. */
+  createBlock: (
+    noteId: number,
+    block: { type: BlockType } & Partial<Pick<Block, "text" | "language" | "url" | "caption">>,
+  ) => request<Block>(`/api/notes/${noteId}/blocks`, { method: "POST", ...json(block) }),
   updateBlock: (
     id: number,
     patch: Partial<Pick<Block, "type" | "text" | "language" | "url" | "caption">>,

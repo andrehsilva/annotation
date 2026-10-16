@@ -237,6 +237,10 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
   faixa "continue escrevendo" e a linha de ícones/atalhos vão junto, de modo que o próximo bloco entra
   logo abaixo delas. A ordem das relações no rodapé não muda, e os números dos blocos continuam sendo
   a posição real na nota. A escolha fica guardada no navegador.
+- O bloco de **url** vazio **é** o campo: quem cria um bloco de link cai direto no campo da url (e no
+  do rótulo), sem botão no meio do caminho. Com url, o cartão passa a *ser* o link — clicar abre em
+  outra aba — e editá-lo é o lápis, que abre os dois campos e os fecha quando o foco sai do bloco (ou
+  com `Esc`); apagar a url no meio da edição não fecha nada.
 - Nessa lista o clique principal depende do tipo: **url** abre o site em outra aba, **imagem** abre um
   modal com a imagem no tamanho real, **vídeo** toca ali mesmo, **pdf** abre o modal do leitor (o
   navegador desenha o PDF, porque `/media` o serve `inline`), e **texto/código** abre a nota já no
@@ -256,6 +260,13 @@ logo abaixo da barra superior, e somem sozinhos (erros ficam por 7 s).
 
 As edições são salvas sozinhas (debounce de 700 ms) e o que ainda não foi enviado é descarregado ao
 sair da nota.
+
+**Bloco em branco não vai para o banco.** O bloco novo — o `+ tipo`, o `/`, o `Enter` ou a nota
+recém-criada — existe só na tela até alguém escrever nele: a linha nasce junto com o primeiro
+conteúdo, e a url/`@`/legenda contam como conteúdo. O que já era linha e ficou sem texto, url e
+legenda sai ao sair da nota, e ao abrir a nota o vazio que estava salvo também sai; o bloco de outra
+conta fica onde está, que quem apaga o dele é quem escreveu. Sem isso, recarregar a página com um
+bloco vazio abandonado trazia o vazio de volta.
 
 ## Ligações entre notas
 
@@ -359,7 +370,7 @@ mas o papel não permite (rotas de admin, e o bloco escrito por outra conta).
 | `GET/POST` | `/api/admin/groups` | lista os grupos (nome e tamanho) / cria — quem compõe o grupo é o admin |
 | `GET/PATCH/DELETE` | `/api/admin/groups/{id}` | os ids de quem está no grupo / renomeia / apaga (leva junto os vínculos com as notas) |
 | `PUT/DELETE` | `/api/admin/groups/{id}/members/{user_id}` | põe/tira alguém do grupo (idempotente) |
-| `GET/POST` | `/api/notes` | as notas que a conta alcança, da mais recente para a mais antiga, com o papel de quem pediu, o dono, as tags, o trecho e as contagens por tipo (`?q=` filtra por título e `limit` corta) / cria com o primeiro bloco (`{"title", "text"}`) e já deixa o dono como `owner` |
+| `GET/POST` | `/api/notes` | as notas que a conta alcança, da mais recente para a mais antiga, com o papel de quem pediu, o dono, as tags, o trecho e as contagens por tipo (`?q=` filtra por título e `limit` corta) / cria (`{"title", "text"}` — o primeiro bloco entra no mesmo commit **só quando o texto já vem escrito**) e já deixa o dono como `owner` |
 | `GET/PATCH/DELETE` | `/api/notes/{id}` | a nota com blocos e relações / renomeia (e a `position`) — só o dono / apaga — só o dono, levando blocos, vínculos, tags, o compartilhamento |
 | `GET` | `/api/notes/{id}/related` | relações, menções de saída e backlinks da nota |
 | `POST/DELETE` | `/api/notes/{id}/relations[/{relation_id}]` | cria (idempotente, com rótulo) / remove relação entre notas |

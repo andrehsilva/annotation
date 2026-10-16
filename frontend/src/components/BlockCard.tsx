@@ -137,6 +137,26 @@ export function BlockCard({
   const youtube = video ? youtubeId(video) : null;
   const vimeo = video && !youtube ? vimeoId(video) : null;
 
+  /**
+   * Bloco de link vazio **é** o campo: quem cria um bloco de url quer colar a url, e o botão que
+   * ficava no meio do caminho não abria nada (o campo só existia com url — o link não entrava).
+   */
+  const linkEditing = block.type === "url" && !foreign && (editingLink || !block.url.trim());
+
+  /** O foco anda entre os dois campos: fecha quando sai do bloco inteiro, não ao trocar de campo. */
+  const onLinkBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setEditingLink(false);
+  };
+
+  /** Esc sai da edição: o cartão volta a ser o link (num bloco vazio não há o que fechar). */
+  const onLinkKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setEditingLink(false);
+    if (event.target instanceof HTMLElement) event.target.blur();
+  };
+
   /** `[[` or `@` right after a space (or the start) starts a mention; anything else is plain text. */
   const TRIGGER = /(?:^|\s)(\[\[|@)([^\[\]\n]*)$/;
 
@@ -327,56 +347,57 @@ export function BlockCard({
           </div>
         )}
 
-        {block.type === "url" &&
-          (block.url.trim() && !editingLink ? (
-            // Com url, o cartão **é** o link: clicar abre fora. Editar tem botão próprio — antes, o
-            // clique ativava o bloco e trocava o cartão pelos campos, e o link nunca abria.
-            <div className="url-block is-card">
-              <a
-                className="link-card"
-                href={block.url}
-                target="_blank"
-                rel="noreferrer"
-                onMouseDown={(event) => event.stopPropagation()}
-              >
-                <span className="link-host">{hostOf(block.url)}</span>
-                <span className="link-title">{block.caption || block.url}</span>
-                <ArrowSquareOut size={12} />
-              </a>
-              {!foreign && (
-                <button
-                  type="button"
-                  className="icon-btn is-tiny"
-                  onClick={() => setEditingLink(true)}
-                  title="Editar o link e o rótulo"
-                  aria-label="Editar o link"
-                >
-                  <PencilSimple size={13} />
-                </button>
-              )}
-            </div>
-          ) : foreign ? (
-            <p className="panel-hint">Bloco de link vazio, de {block.author}.</p>
-          ) : block.url.trim() ? null : (
-            <button
-              type="button"
-              className="panel-hint is-action"
-              onClick={() => setEditingLink(true)}
+        {block.type === "url" && !linkEditing && block.url.trim() && (
+          // Com url, o cartão **é** o link: clicar abre fora. Editar tem botão próprio — antes, o
+          // clique ativava o bloco e trocava o cartão pelos campos, e o link nunca abria.
+          <div className="url-block is-card">
+            <a
+              className="link-card"
+              href={block.url}
+              target="_blank"
+              rel="noreferrer"
+              onMouseDown={(event) => event.stopPropagation()}
             >
-              <Paperclip size={13} /> Bloco de link vazio: clique para colar a url.
-            </button>
-          ))}
+              <span className="link-host">{hostOf(block.url)}</span>
+              <span className="link-title">{block.caption || block.url}</span>
+              <ArrowSquareOut size={12} />
+            </a>
+            {!foreign && (
+              <button
+                type="button"
+                className="icon-btn is-tiny"
+                onClick={() => setEditingLink(true)}
+                title="Editar o link e o rótulo"
+                aria-label="Editar o link"
+              >
+                <PencilSimple size={13} />
+              </button>
+            )}
+          </div>
+        )}
 
-        {block.type === "url" && block.url.trim() && editingLink && !foreign && (
-          <div className="url-block">
+        {block.type === "url" && !linkEditing && !block.url.trim() && (
+          <p className="panel-hint">
+            <Paperclip size={13} /> Bloco de link vazio, de {block.author}.
+          </p>
+        )}
+
+        {linkEditing && (
+          // O foco anda entre os dois campos: só fecha quando sai do bloco inteiro (ou com Esc), e
+          // nunca por a url ter ficado vazia no meio da edição — era por aí que o link se perdia.
+          <div className="url-block" onBlur={onLinkBlur} onKeyDown={onLinkKeyDown}>
             <input
               ref={(element) => onRegisterRef(element)}
               className="input"
               value={block.url}
               placeholder="https://…"
-              autoFocus
-              onChange={(event) => onPatch({ url: event.target.value })}
-              onBlur={() => setEditingLink(false)}
+              autoFocus={active}
+              // Ao escrever a url o campo se fixa aberto: sem isto o cartão voltava no meio da
+              // digitação (o bloco deixava de estar vazio) e a url parava na primeira letra.
+              onChange={(event) => {
+                setEditingLink(true);
+                onPatch({ url: event.target.value });
+              }}
             />
             <input
               className="input"

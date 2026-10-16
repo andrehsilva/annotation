@@ -23,6 +23,17 @@ const SAVE_DELAY = 700;
 const PICKER_LIMIT = 300;
 const ORDER_KEY = "notai-note-order";
 
+/** O conteúdo de um bloco: é o que uma escrita manda — e o que o rascunho leva junto ao nascer. */
+const contentOf = (
+  block: Block,
+): Pick<Block, "type" | "text" | "language" | "url" | "caption"> => ({
+  type: block.type,
+  text: block.text,
+  language: block.language,
+  url: block.url,
+  caption: block.caption,
+});
+
 /** O que o aviso oferece: o rótulo do botão e o que ele faz. */
 type ToastAction = NonNullable<Toast["action"]>;
 
@@ -65,12 +76,19 @@ export function NoteEditor({
   const [kindMenuFor, setKindMenuFor] = useState<number | null>(null);
   const [title, setTitle] = useState(note.title);
   const [shareOpen, setShareOpen] = useState(false);
-  /** O bloco ativo em ref: o prune roda em callback e não pode apagar o que está em edição. */
+  /** O bloco ativo em ref: a limpeza roda em callback e não pode apagar o que está em edição. */
   const activeRef = useRef<number>(activeId);
-  /** Fila das limpezas de bloco vazio — ver `pruneBlocks`. */
-  const pruneChain = useRef<Promise<void>>(Promise.resolve());
-  /** Nota que já ganhou o primeiro bloco nesta visita: o efeito pode rodar duas vezes em dev. */
-  const healedRef = useRef<number | null>(null);
+  /** A nota na tela: escritas assíncronas não podem tocar no caderno que já saiu. */
+  const noteIdRef = useRef(note.id);
+  noteIdRef.current = note.id;
+  /** Fila das escritas que mexem na lista de blocos — ver `enqueue`. */
+  const writeChain = useRef<Promise<void>>(Promise.resolve());
+  /** Rascunho já gravado → id da linha no banco. O id local não muda, então a linha não é remontada. */
+  const realIds = useRef(new Map<number, number>());
+  /** Gravações de rascunho em voo, por id local: dois saves do mesmo bloco não criam duas linhas. */
+  const creates = useRef(new Map<number, Promise<void>>());
+  /** Contador dos ids locais de rascunho — negativos, nunca colidem com um id do banco. */
+  const draftSeq = useRef(0);
   const [gistUrl, setGistUrl] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   // A nota pode ser de outra conta (chegou por grupo): só o dono apaga, e quem só lê não escreve —
@@ -141,28 +159,6 @@ export function NoteEditor({
     };
   }, [note.id]);
 
-  // Ao abrir a nota, o que já estava vazio no banco sai (bloco em branco não fica salvo) e uma nota
-  // sem bloco nenhum ganha o primeiro — o editor sempre tem onde escrever.
-  useEffect(() => {
-    if (note.blocks.length === 0) {
-      if (healedRef.current === note.id) return;
-      healedRef.current = note.id;
-      void api
-        .createBlock(note.id, "text")
-        .then(async (created) => {
-          applyLocal([...blocksRef.current, created]);
-          setActiveId(created.id);
-          setFocusId(created.id);
-          await changeRef.current();
-        })
-        .catch((error) => errorRef.current(error));
-      return;
-    }
-    healedRef.current = null;
-    if (note.blocks.length > 1) void pruneEmpty();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando a nota muda
-  }, [note.id]);
-
   // Reset only when another note (or another anchor) is opened; refetches must not clobber typing.
   useEffect(() => {
     activeRef.current = activeId;
@@ -173,13 +169,19 @@ export function NoteEditor({
       anchorBlockId !== null && note.blocks.some((block) => block.id === anchorBlockId)
         ? anchorBlockId
         : null;
-    const target = anchored ?? note.blocks.at(-1)?.id ?? 0;
-    setBlocks(note.blocks);
-    blocksRef.current = note.blocks;
+    // Nota sem bloco nenhum abre com um rascunho: o editor sempre tem onde escrever, e o rascunho
+    // não é uma linha em branco no banco — ele só nasce quando alguém escreve nele.
+    const loaded = note.blocks.length === 0 && canEdit ? [draft("text")] : note.blocks;
+    const target = anchored ?? loaded.at(-1)?.id ?? 0;
+    setBlocks(loaded);
+    blocksRef.current = loaded;
     setTitle(note.title);
     setActiveId(target);
     setFocusId(target || null);
     setHighlightId(anchored);
+    // O que já estava vazio no banco (dado antigo) sai ao abrir a nota.
+    if (note.blocks.some((block) => isBlank(block) && !isForeignBlock(block)))
+      void pruneBlocks(loaded, note.id, true);
     if (anchored !== null) {
       const timer = window.setTimeout(() => setHighlightId(null), 2200);
       return () => window.clearTimeout(timer);
@@ -198,6 +200,90 @@ export function NoteEditor({
     setFocusId(null);
   }, [focusId, blocks]);
 
+  /** O id da linha no banco: o do bloco, ou o que o rascunho ganhou ao ser gravado. */
+  const realIdOf = (block: Pick<Block, "id">): number | null =>
+    block.id > 0 ? block.id : realIds.current.get(block.id) ?? null;
+
+  /**
+   * O bloco novo da tela: id local negativo e **nenhuma linha no banco**.
+   *
+   * O caderno não guarda bloco em branco, então o bloco nasce aqui e só vira linha quando alguém
+   * escreve nele (`flush`). Recarregar a página com um bloco vazio abandonado não traz nada de volta.
+   */
+  const draft = (kind: BlockType): Block => {
+    draftSeq.current -= 1;
+    const now = new Date().toISOString();
+    return {
+      id: draftSeq.current,
+      note_id: noteIdRef.current,
+      position: 0,
+      type: kind,
+      text: "",
+      language: "",
+      url: "",
+      caption: "",
+      author: "",
+      created_at: now,
+      updated_at: now,
+    };
+  };
+
+  /** Onde escrever quando a tela ficou sem bloco nenhum: um rascunho de texto, já focado. */
+  const seedDraft = (): Block[] => {
+    const fresh = draft("text");
+    setActiveId(fresh.id);
+    setFocusId(fresh.id);
+    return [fresh];
+  };
+
+  /**
+   * Escritas que mexem na lista de blocos — limpeza, criação e arrasto — entram nesta fila: uma por
+   * vez, a seguinte já enxerga o resultado da anterior. Em paralelo, duas limpezas decidiam "fica
+   * um" sobre a mesma lista e podiam apagar todos os blocos.
+   */
+  const enqueue = useCallback(<T,>(job: () => Promise<T>): Promise<T> => {
+    const run = writeChain.current.then(job);
+    writeChain.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }, []);
+
+  /** A ordem do banco é a da tela; o rascunho que ainda não virou linha fica fora da lista. */
+  const reorder = useCallback(
+    () =>
+      enqueue(async () => {
+        const ids = blocksRef.current
+          .map((block) => realIdOf(block))
+          .filter((id): id is number => id !== null);
+        if (ids.length > 0) await api.reorderBlocks(noteIdRef.current, ids);
+      }),
+    [enqueue],
+  );
+
+  /**
+   * Grava o rascunho: a linha nasce já com o que foi escrito nele, e o id local continua o mesmo —
+   * a linha não é remontada no meio da digitação e o cursor fica onde está.
+   */
+  const persist = useCallback(
+    (block: Block): Promise<void> => {
+      const running = creates.current.get(block.id);
+      if (running) return running;
+      const job = (async () => {
+        const latest = blocksRef.current.find((item) => item.id === block.id) ?? block;
+        const created = await api.createBlock(noteIdRef.current, contentOf(latest));
+        realIds.current.set(block.id, created.id);
+        await reorder();
+        await changeRef.current();
+        await relatedRef.current(); // a menção escrita agora já vale
+      })().finally(() => creates.current.delete(block.id));
+      creates.current.set(block.id, job);
+      return job;
+    },
+    [enqueue, reorder],
+  );
+
   const flush = useCallback(
     async (id: number) => {
       const timer = timers.current.get(id);
@@ -208,20 +294,20 @@ export function NoteEditor({
       const block = blocksRef.current.find((item) => item.id === id);
       if (!block) return;
       try {
-        await api.updateBlock(id, {
-          type: block.type,
-          text: block.text,
-          language: block.language,
-          url: block.url,
-          caption: block.caption,
-        });
+        const real = realIdOf(block);
+        if (real === null) {
+          // Rascunho em branco é só a linha em branco da tela: não vira linha no banco.
+          if (!isBlank(block)) await persist(block);
+          return;
+        }
+        await api.updateBlock(real, contentOf(block));
         await changeRef.current();
         await relatedRef.current(); // a saved `[[…]]` changes what this note cites
       } catch (error) {
         errorRef.current(error);
       }
     },
-    [],
+    [persist],
   );
 
   /** Esquece o save pendente de um bloco: a linha está saindo, o PATCH chegaria tarde. */
@@ -234,65 +320,54 @@ export function NoteEditor({
   };
 
   /**
-   * Bloco vazio não fica salvo.
+   * Bloco em branco não fica no caderno.
    *
-   * Ao sair do bloco (ou da nota) o que não tem conteúdo — texto, url e legenda vazios — é apagado,
-   * porque o banco não é lugar de bloco em branco. A nota nunca fica **sem** bloco nenhum: quando
-   * todos estão vazios, o último fica, e é nele que a próxima escrita entra. Bloco de outra conta
-   * fica de fora: quem apaga o dele é quem escreveu, e o vazio dele não é meu para mexer.
+   * O bloco novo já nasce rascunho, então aqui só cai o que **virou linha e ficou sem conteúdo** —
+   * o que foi apagado depois de salvo e o que já estava em branco de antes. Ao abrir a nota a lista
+   * vem do banco; ao sair, a lista da tela é lida na hora. Bloco de outra conta fica de fora: quem
+   * apaga o dele é quem escreveu, e o vazio dele não é meu para mexer.
    */
   const doPrune = useCallback(
-    async (list: Block[], includeActive: boolean, touchLocal: boolean): Promise<number[]> => {
-    const blanks = list.filter(
-      (block) =>
-        isBlank(block) && !isForeignBlock(block) && (includeActive || block.id !== activeRef.current),
-    );
-    if (blanks.length === 0) return [];
-    const survivors = list.filter((block) => !blanks.includes(block));
-    const doomed = survivors.length > 0 ? blanks : blanks.slice(1);
-    if (doomed.length === 0) return [];
-    doomed.forEach((block) => cancelPending(block.id));
-    try {
-      await Promise.all(doomed.map((block) => api.deleteBlock(block.id)));
-    } catch (error) {
-      errorRef.current(error);
-      return [];
-    }
-    const ids = doomed.map((block) => block.id);
-    if (!touchLocal) {
+    async (list: Block[], noteId: number, touchLocal: boolean): Promise<void> => {
+      const doomed = list
+        .map((block) => ({ block, id: realIdOf(block) }))
+        .filter(
+          (entry): entry is { block: Block; id: number } =>
+            entry.id !== null && isBlank(entry.block) && !isForeignBlock(entry.block),
+        );
+      if (doomed.length === 0) return;
+      doomed.forEach((entry) => cancelPending(entry.block.id));
+      try {
+        await Promise.all(doomed.map((entry) => api.deleteBlock(entry.id)));
+      } catch (error) {
+        errorRef.current(error);
+        return;
+      }
+      doomed.forEach((entry) => realIds.current.delete(entry.block.id));
+      // A lista da tela só é mexida se a nota da limpeza ainda é a que está aberta: a limpeza da nota
+      // que saiu roda depois de a próxima já ter entrado no lugar dela.
+      if (!touchLocal || noteIdRef.current !== noteId) {
+        await changeRef.current();
+        return;
+      }
+      const gone = new Set(doomed.map((entry) => entry.block.id));
+      const next = blocksRef.current.filter((block) => !gone.has(block.id));
+      if (next.length === 0) {
+        applyLocal(seedDraft());
+      } else {
+        applyLocal(next);
+        const last = next.at(-1);
+        if (last && !next.some((block) => block.id === activeRef.current)) setActiveId(last.id);
+      }
       await changeRef.current();
-      return ids;
-    }
-    const gone = new Set(ids);
-    const next = blocksRef.current.filter((block) => !gone.has(block.id));
-    applyLocal(next);
-    if (next.length > 0 && !next.some((block) => block.id === activeRef.current)) {
-      setActiveId(next.at(-1)!.id);
-    }
-    await changeRef.current();
-    return ids;
     },
-    [],
+    [enqueue],
   );
 
   const pruneBlocks = useCallback(
-    (list: Block[], includeActive: boolean, touchLocal: boolean): Promise<number[]> => {
-      // Uma limpeza por vez. Duas em paralelo decidem "fica um" sobre a mesma lista e podem apagar
-      // todos os blocos; enfileiradas, a segunda já enxerga o resultado da primeira.
-      const run = pruneChain.current.then(() => doPrune(list, includeActive, touchLocal));
-      pruneChain.current = run.then(
-        () => undefined,
-        () => undefined,
-      );
-      return run;
-    },
-    [doPrune],
-  );
-
-  /** A limpeza do que está na tela: o bloco em edição fica, porque é nele que a escrita continua. */
-  const pruneEmpty = useCallback(
-    (includeActive = false) => pruneBlocks(blocksRef.current, includeActive, true),
-    [pruneBlocks],
+    (list: Block[], noteId: number, touchLocal: boolean): Promise<void> =>
+      enqueue(() => doPrune(list, noteId, touchLocal)),
+    [enqueue, doPrune],
   );
 
   const applyLocal = (next: Block[]) => {
@@ -307,45 +382,36 @@ export function NoteEditor({
     timers.current.set(id, window.setTimeout(() => void flush(id), SAVE_DELAY));
   };
 
-  const insertAfter = async (block: Block, kind: BlockType) => {
-    try {
-      const created = await api.createBlock(note.id, kind);
-      const next = [...blocksRef.current];
-      const at = next.findIndex((item) => item.id === block.id) + 1;
-      next.splice(at, 0, created);
-      applyLocal(next);
-      setActiveId(created.id);
-      setFocusId(created.id);
-      await api.reorderBlocks(note.id, next.map((item) => item.id));
-      await changeRef.current();
-    } catch (error) {
-      errorRef.current(error);
-    }
+  /** Bloco novo entra na tela como rascunho: quem grava é o primeiro conteúdo escrito nele. */
+  const insertAfter = (block: Block, kind: BlockType) => {
+    const next = [...blocksRef.current];
+    const at = next.findIndex((item) => item.id === block.id) + 1;
+    const fresh = draft(kind);
+    next.splice(at, 0, fresh);
+    applyLocal(next);
+    setActiveId(fresh.id);
+    setFocusId(fresh.id);
   };
 
-  const append = async (kind: BlockType) => {
+  const append = (kind: BlockType) => {
     const last = blocksRef.current.at(-1);
     if (last) {
-      await insertAfter(last, kind);
+      insertAfter(last, kind);
       return;
     }
-    try {
-      const created = await api.createBlock(note.id, kind);
-      applyLocal([created]);
-      setActiveId(created.id);
-      setFocusId(created.id);
-      await changeRef.current();
-    } catch (error) {
-      errorRef.current(error);
-    }
+    const fresh = draft(kind);
+    applyLocal([fresh]);
+    setActiveId(fresh.id);
+    setFocusId(fresh.id);
   };
 
   // Sair da nota (ou da tela) leva junto o que ficou vazio no caderno antigo — inclusive o bloco
   // que estava em edição: ninguém vai escrever nele, e o banco não é lugar de bloco em branco. A
   // lista é lida aqui dentro, na hora da saída, porque é ela que ainda tem o caderno que está saindo.
   useEffect(() => {
+    const noteId = note.id;
     return () => {
-      void pruneBlocks(blocksRef.current, true, false);
+      void pruneBlocks(blocksRef.current, noteId, false);
     };
   }, [note.id, pruneBlocks]);
 
@@ -373,7 +439,11 @@ export function NoteEditor({
     const order = list.map((item) => item.id);
     cancelPending(id);
     try {
-      await api.deleteBlock(id);
+      const flying = creates.current.get(block.id);
+      if (flying) await flying; // a linha pode ter nascido no meio do gesto
+      const real = realIdOf(block);
+      if (real !== null) await api.deleteBlock(real);
+      realIds.current.delete(block.id);
       applyLocal(list.filter((item) => item.id !== id));
       if (previous) {
         setActiveId(previous.id);
@@ -388,25 +458,27 @@ export function NoteEditor({
 
   /** Recria o bloco apagado com o mesmo conteúdo, na mesma posição da nota. */
   const restore = async (block: Block, order: number[]) => {
-    try {
-      const created = await api.createBlock(note.id, block.type);
-      const filled = await api.updateBlock(created.id, {
-        type: block.type,
-        text: block.text,
-        language: block.language,
-        url: block.url,
-        caption: block.caption,
-      });
+    // O lugar é o de antes: basta entrar logo antes de quem vinha depois dele (ou no fim, se era
+    // o último). Ancorar no vizinho sobrevivente aguenta bem melhor do que um índice guardado.
+    const after = order[order.indexOf(block.id) + 1];
+    const put = (restored: Block) => {
       const current = blocksRef.current;
-      // O lugar é o de antes: basta entrar logo antes de quem vinha depois dele (ou no fim, se era
-      // o último). Ancorar no vizinho sobrevivente aguenta bem melhor do que um índice guardado.
-      const heir = current.findIndex((item) => item.id === order[order.indexOf(block.id) + 1]);
+      const heir = current.findIndex((item) => item.id === after);
       const next = [...current];
-      next.splice(heir === -1 ? current.length : heir, 0, filled);
-      await api.reorderBlocks(note.id, next.map((item) => item.id));
+      next.splice(heir === -1 ? current.length : heir, 0, restored);
       applyLocal(next);
-      setActiveId(filled.id);
-      setFocusId(filled.id);
+      setActiveId(restored.id);
+      setFocusId(restored.id);
+    };
+    try {
+      // Rascunho nunca virou linha: desfazer devolve ele mesmo, sem tocar no banco.
+      if (realIdOf(block) === null) {
+        put(block);
+        return;
+      }
+      const created = await api.createBlock(noteIdRef.current, contentOf(block));
+      put(created);
+      await reorder();
       await changeRef.current();
     } catch (error) {
       errorRef.current(error);
@@ -480,14 +552,14 @@ export function NoteEditor({
     const ordered = newestFirst ? displayed.reverse() : displayed;
     applyLocal(ordered);
     try {
-      await api.reorderBlocks(note.id, ordered.map((block) => block.id));
+      await reorder();
     } catch (error) {
       errorRef.current(error);
     }
   };
 
   /** "/" on a blank block converts it; on a block with content it appends a new one of that kind. */
-  const applyKind = async (block: Block, kind: BlockType) => {
+  const applyKind = (block: Block, kind: BlockType) => {
     setKindMenuFor(null);
     setActiveId(block.id);
     // Bloco de outra conta não se converte: o tipo dele é do autor, então o tipo escolhido vira um
@@ -497,7 +569,7 @@ export function NoteEditor({
       setFocusId(block.id);
       return;
     }
-    await insertAfter(block, kind);
+    insertAfter(block, kind);
   };
 
   /**
@@ -520,23 +592,23 @@ export function NoteEditor({
     }
   };
 
-  const continueWriting = async () => {
+  const continueWriting = () => {
     const last = blocksRef.current.at(-1);
     if (!last) {
-      await append("text");
+      append("text");
       return;
     }
     setActiveId(last.id);
     setFocusId(last.id);
     if (isBlank(last)) return;
-    await append("text");
+    append("text");
   };
 
   /** The "keep writing" strip rides along with the order: it sits where the next block lands. */
   const tail = (
     <div
       className="editor-tail"
-      onClick={() => void continueWriting()}
+      onClick={continueWriting}
       title="Continuar escrevendo aqui"
     >
       <span className="editor-tail-hint">
@@ -646,7 +718,7 @@ export function NoteEditor({
         // Bloco vazio não gera outro bloco vazio: escreva neste, ou troque o tipo com `/`. Bloco de
         // outra conta é a exceção — não dá para escrever nele, então o novo é o caminho para seguir.
         if (isBlank(active) && !isForeignBlock(active)) return;
-        void insertAfter(active, active.type);
+        insertAfter(active, active.type);
         return;
       }
     }
@@ -765,8 +837,8 @@ export function NoteEditor({
         </p>
       </header>
 
-      {newestFirst && tools}
-      {newestFirst && tail}
+      {canEdit && newestFirst && tools}
+      {canEdit && newestFirst && tail}
 
       <div className="block-list">
         {shown.map((block) => (
@@ -807,7 +879,7 @@ export function NoteEditor({
             {kindMenuFor === block.id && (
               <KindMenu
                 current={block.type}
-                onPick={(kind) => void applyKind(block, kind)}
+                onPick={(kind) => applyKind(block, kind)}
                 onClose={() => setKindMenuFor(null)}
               />
             )}
@@ -836,8 +908,8 @@ export function NoteEditor({
         ))}
       </div>
 
-      {!newestFirst && tail}
-      {!newestFirst && tools}
+      {canEdit && !newestFirst && tail}
+      {canEdit && !newestFirst && tools}
 
       {shareOpen && (
         <ShareModal
