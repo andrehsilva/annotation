@@ -6,6 +6,7 @@ __pycache__/
 backend/data/
 .shots/
 .vite/
+desktop/bin/
 .env
 .env.*
 !.env.example

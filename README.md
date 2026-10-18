@@ -52,6 +52,13 @@ npm run dev
 Dados de demonstração: `cd backend && .venv/Scripts/python.exe seed.py --reset`
 (`--email <e-mail>` dá os dados a outra pessoa; o padrão é o admin).
 
+## Captura pelo desktop (opcional)
+
+`desktop/` é um helper em Go para salvar o link aberto no navegador sem extensão: bandeja no GNOME,
+atalho de teclado e handler `notai://` para um bookmarklet. Ele faz login na API, guarda o token no
+Secret Service e cria uma nota com bloco `url`. Build, instalação e uso em
+[`desktop/README.md`](desktop/README.md).
+
 ## Deploy
 
 Produção é Docker Compose atrás do proxy do painel: `deploy/docker-compose.yml` sobe dois serviços —

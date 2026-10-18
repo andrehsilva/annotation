@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NotAI Capture
+Comment=Bandeja do NotAI
+Exec=notai-capture tray
+Icon=notai-capture
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

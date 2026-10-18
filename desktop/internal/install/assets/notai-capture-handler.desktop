@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NotAI Capture
+Comment=Recebe links do bookmarklet notai://
+Exec=notai-capture %u
+NoDisplay=true
+Terminal=false
+MimeType=x-scheme-handler/notai;

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=NotAI Capture
+Comment=Salva o link atual no NotAI
+Exec=notai-capture tray
+Icon=notai-capture
+Terminal=false
+StartupNotify=false
+Categories=Utility;
+Keywords=notai;link;clipboard;captura;
